@@ -156,6 +156,7 @@ export interface PiAPI {
     send(sessionId: string, message: string): Promise<void>
     steer(sessionId: string, message: string): Promise<void>
     listCommands(sessionId: string): Promise<SlashCommand[]>
+    setModel(sessionId: string, provider: string, modelId: string): Promise<void>
     abort(sessionId: string): Promise<void>
     close(sessionId: string): Promise<void>
   }

@@ -27,7 +27,9 @@ export default function Toolbar() {
     const [p, ...rest] = val.split('/')
     const m = rest.join('/')
     try {
-      await window.pi.session.send(tab.sessionId, `/model ${p}/${m}`)
+      // Real RPC set_model — the TUI-only "/model" text command does not
+      // execute through the RPC prompt path.
+      await window.pi.session.setModel(tab.sessionId, p, m)
       replaceTab(tab.id, { ...tab, model: m, provider: p })
     } catch (err) {
       console.error(err)

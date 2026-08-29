@@ -103,6 +103,7 @@ if (process.env['PI_E2E']) {
       send: async () => {},
       steer: async () => {},
       listCommands: async () => [],
+      setModel: async () => {},
       abort: async (sessionId) => {
         emit('pi:idle', { sessionId })
       },
@@ -209,6 +210,8 @@ if (process.env['PI_E2E']) {
       send: (sessionId, message) => ipcRenderer.invoke('session:send', { sessionId, message }),
       steer: (sessionId, message) => ipcRenderer.invoke('session:steer', { sessionId, message }),
       listCommands: (sessionId) => ipcRenderer.invoke('session:listCommands', { sessionId }),
+      setModel: (sessionId, provider, modelId) =>
+        ipcRenderer.invoke('session:setModel', { sessionId, provider, modelId }),
       abort: (sessionId) => ipcRenderer.invoke('session:abort', { sessionId }),
       close: (sessionId) => ipcRenderer.invoke('session:close', { sessionId }),
     },

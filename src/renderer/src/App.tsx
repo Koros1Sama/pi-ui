@@ -32,12 +32,16 @@ export default function App() {
   }, [setSessions])
 
   useEffect(() => {
-    Promise.all([window.pi.config.get(), window.pi.models.list()])
-      .then(([config, models]) => {
-        setConfig(config)
-        setModels(models)
-      })
+    // Config arrives instantly; the model list may wait out the pi RPC hub
+    // boot (user extensions) — don't block the UI shell on it.
+    window.pi.config
+      .get()
+      .then((config) => setConfig(config))
       .catch(console.error)
+    window.pi.models
+      .list()
+      .then(setModels)
+      .catch((err) => console.error('[models:list]', err))
 
     loadSessions()
   }, [setConfig, setModels, loadSessions])
