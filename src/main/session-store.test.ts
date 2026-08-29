@@ -62,6 +62,74 @@ describe('SessionStore', () => {
     expect(result[0].isActive).toBe(false)
   })
 
+  it('list() falls back to the first user message snippet when name is missing', async () => {
+    vi.mocked(SessionManager.listAll).mockResolvedValue([
+      {
+        path: '/home/.pi/agent/sessions/--home-code--/s.jsonl',
+        id: 'abc',
+        cwd: '/home/code',
+        name: undefined,
+        created: new Date('2024-01-01'),
+        modified: new Date('2024-01-02'),
+        messageCount: 2,
+        firstMessage: 'anything',
+        allMessagesText: '',
+      },
+    ])
+    mockFs.readFileSync.mockReturnValue(
+      '{"type":"session","version":3,"id":"abc","cwd":"/home/code"}\n' +
+        '{"type":"model_change","id":"m1","modelId":"glm-5.3","provider":"zai"}\n' +
+        '{"type":"message","message":{"role":"user","content":[{"type":"text","text":"Fix the login bug please"}]}}\n'
+    )
+
+    const result = await store.list([])
+    expect(result[0].name).toBe('Fix the login bug please')
+    expect(result[0].model).toBe('glm-5.3')
+  })
+
+  it('list() truncates long snippets to 60 chars', async () => {
+    vi.mocked(SessionManager.listAll).mockResolvedValue([
+      {
+        path: '/home/.pi/agent/sessions/--home-code--/s.jsonl',
+        id: 'abc',
+        cwd: '/home/code',
+        name: undefined,
+        created: new Date(),
+        modified: new Date(),
+        messageCount: 1,
+        firstMessage: '',
+        allMessagesText: '',
+      },
+    ])
+    const longText = 'a'.repeat(100)
+    mockFs.readFileSync.mockReturnValue(
+      `{"type":"session","cwd":"/home/code"}\n{"type":"message","message":{"role":"user","content":"${longText}"}}\n`
+    )
+
+    const result = await store.list([])
+    expect(result[0].name).toBe('a'.repeat(60))
+  })
+
+  it('list() keeps an explicit name over the snippet fallback', async () => {
+    vi.mocked(SessionManager.listAll).mockResolvedValue([
+      {
+        path: '/home/.pi/agent/sessions/--home-code--/s.jsonl',
+        id: 'abc',
+        cwd: '/home/code',
+        name: 'My Named Session',
+        created: new Date('2024-01-01'),
+        modified: new Date('2024-01-02'),
+        messageCount: 2,
+        firstMessage: 'x',
+        allMessagesText: '',
+      },
+    ])
+    mockFs.readFileSync.mockReturnValue('{}')
+
+    const result = await store.list([])
+    expect(result[0].name).toBe('My Named Session')
+  })
+
   it('list() marks isActive when sessionId matches active session', async () => {
     vi.mocked(SessionManager.listAll).mockResolvedValue([
       {

@@ -12,7 +12,7 @@
 import { randomUUID } from 'crypto'
 import { readFile } from 'fs/promises'
 import { homedir } from 'os'
-import { RpcProcess } from './rpc-process'
+import { RpcProcess, DIALOG_UI_METHODS } from './rpc-process'
 import type { PiEventName, PiEventPayloads, SlashCommand, ToolResultDetails } from '@shared/types'
 import type { AppThinkingLevel } from '@shared/types'
 
@@ -49,6 +49,45 @@ interface ActiveSession {
   toolStarts: Map<string, number>
 }
 
+/**
+ * TUI built-ins that have direct RPC equivalents. They are not part of
+ * get_commands (TUI-only list), so we surface and route them ourselves.
+ */
+const RPC_BUILTINS: SlashCommand[] = [
+  {
+    name: 'compact',
+    description: 'Compress the conversation context',
+    source: 'builtin',
+    insertText: '/compact',
+  },
+  {
+    name: 'export',
+    description: 'Export the session to an HTML file',
+    source: 'builtin',
+    insertText: '/export',
+  },
+  {
+    name: 'name',
+    description: 'Set the session display name — /name <title>',
+    source: 'builtin',
+    insertText: '/name ',
+  },
+  {
+    name: 'stats',
+    description: 'Show token usage, cost and context stats',
+    source: 'builtin',
+    insertText: '/stats',
+  },
+  {
+    name: 'tree',
+    description: 'Show the session branch tree',
+    source: 'builtin',
+    insertText: '/tree',
+  },
+]
+
+const BUILTIN_PATTERN = /^\/(compact|export|name|stats|tree)(?:\s+([\s\S]*))?$/
+
 export class SessionService {
   private readonly sessions = new Map<string, ActiveSession>()
 
@@ -84,6 +123,11 @@ export class SessionService {
 
   async send(sessionId: string, message: string): Promise<void> {
     const entry = this.getOrThrow(sessionId)
+    const builtin = BUILTIN_PATTERN.exec(message.trim())
+    if (builtin) {
+      await this.runBuiltin(sessionId, entry, builtin[1], (builtin[2] ?? '').trim())
+      return
+    }
     try {
       await entry.rpc.request({ type: 'prompt', message })
     } catch (err) {
@@ -129,12 +173,14 @@ export class SessionService {
     const entry = this.getOrThrow(sessionId)
     if (entry.commandsCache) return entry.commandsCache
     const data = await entry.rpc.request<{ commands?: RpcCommand[] }>({ type: 'get_commands' })
-    const commands = (data?.commands ?? []).map((c) => ({
-      name: c.name,
-      description: c.description ?? '',
-      source: c.source,
-      insertText: `/${c.name}`,
-    }))
+    const commands = RPC_BUILTINS.concat(
+      (data?.commands ?? []).map((c) => ({
+        name: c.name,
+        description: c.description ?? '',
+        source: c.source,
+        insertText: `/${c.name}`,
+      }))
+    )
     entry.commandsCache = commands
     return commands
   }
@@ -159,6 +205,10 @@ export class SessionService {
       throw new Error('Session switch cancelled by an extension')
     }
     await this.captureState(entry).catch(() => undefined)
+    entry.onEvent('pi:session-ready', {
+      sessionId,
+      sdkSessionId: entry.sdkSessionId,
+    })
     return { sessionId, sdkSessionId: entry.sdkSessionId ?? sessionId }
   }
 
@@ -171,6 +221,24 @@ export class SessionService {
 
   getActiveSessionIds(): string[] {
     return Array.from(this.sessions.keys())
+  }
+
+  /** Live sessions with their in-subprocess (JSONL) ids, for sidebar highlighting. */
+  getActiveSessionsWithSdk(): Array<{ sessionId: string; sdkSessionId: string | null }> {
+    return Array.from(this.sessions.entries()).map(([sessionId, entry]) => ({
+      sessionId,
+      sdkSessionId: entry.sdkSessionId,
+    }))
+  }
+
+  /** Answer a forwarded extension UI dialog (select/confirm/input/editor). */
+  async uiRespond(
+    sessionId: string,
+    requestId: string,
+    response: { value?: string; confirmed?: boolean; cancelled?: boolean }
+  ): Promise<void> {
+    const entry = this.getOrThrow(sessionId)
+    entry.rpc.writeUiResponse({ type: 'extension_ui_response', id: requestId, ...response })
   }
 
   // ── internals ─────────────────────────────────────────────────────────────
@@ -204,9 +272,133 @@ export class SessionService {
     rpc.on('agent-event', (ev: Record<string, unknown>) => {
       this.handleRpcEvent(sessionId, entry, ev)
     })
+    rpc.on('ui-request', (req: Record<string, unknown>) => {
+      this.handleUiRequest(sessionId, entry, req)
+    })
     rpc.on('exit', () => {
       this.handleUnexpectedExit(sessionId, entry)
     })
+  }
+
+  /** Forward a blocking extension dialog to the host UI as a pi:ui-request event. */
+  private handleUiRequest(
+    sessionId: string,
+    entry: ActiveSession,
+    req: Record<string, unknown>
+  ): void {
+    const method = String(req['method'] ?? '')
+    const requestId = req['id']
+    if (!DIALOG_UI_METHODS.has(method) || typeof requestId !== 'string') return
+    const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+    entry.onEvent('pi:ui-request', {
+      sessionId,
+      requestId,
+      method: method as 'select' | 'confirm' | 'input' | 'editor',
+      title: str(req['title']),
+      message: str(req['message']),
+      placeholder: str(req['placeholder']),
+      prefill: str(req['prefill']),
+      options: Array.isArray(req['options']) ? (req['options'] as string[]) : undefined,
+    })
+  }
+
+  /** Execute a TUI built-in via its direct RPC equivalent and render the result in chat. */
+  private async runBuiltin(
+    sessionId: string,
+    entry: ActiveSession,
+    name: string,
+    args: string
+  ): Promise<void> {
+    try {
+      switch (name) {
+        case 'compact': {
+          const r = await entry.rpc.request<{
+            summary?: string
+            estimatedTokensAfter?: number
+            tokensBefore?: number
+          }>({ type: 'compact' })
+          const from =
+            typeof r?.tokensBefore === 'number'
+              ? ` (~${Math.round(r.tokensBefore / 1000)}k tokens)`
+              : ''
+          const to =
+            typeof r?.estimatedTokensAfter === 'number'
+              ? ` → ~${Math.round(r.estimatedTokensAfter / 1000)}k`
+              : ''
+          this.emitAssistantText(
+            sessionId,
+            entry,
+            `**Compacted.**${from}${to}${r?.summary ? `\n\n${r.summary}` : ''}`
+          )
+          break
+        }
+        case 'name': {
+          if (!args) {
+            this.emitAssistantText(sessionId, entry, 'Usage: `/name <title>`')
+            break
+          }
+          await entry.rpc.request({ type: 'set_session_name', name: args })
+          this.emitAssistantText(sessionId, entry, `Session name set to **${args}**.`)
+          // Let the sidebar pick up the new name immediately.
+          entry.onEvent('pi:session-ready', {
+            sessionId,
+            sdkSessionId: entry.sdkSessionId,
+          })
+          break
+        }
+        case 'stats': {
+          const s = await entry.rpc.request<{
+            userMessages?: number
+            assistantMessages?: number
+            toolCalls?: number
+            totalMessages?: number
+            tokens?: { total?: number }
+            cost?: number
+            contextUsage?: {
+              tokens?: number | null
+              contextWindow?: number
+              percent?: number | null
+            }
+          }>({ type: 'get_session_stats' })
+          const ctx =
+            s?.contextUsage && s.contextUsage.tokens != null && s.contextUsage.percent != null
+              ? `\n- Context: ~${Math.round(s.contextUsage.tokens / 1000)}k / ${Math.round((s.contextUsage.contextWindow ?? 0) / 1000)}k tokens (${s.contextUsage.percent}%)`
+              : ''
+          this.emitAssistantText(
+            sessionId,
+            entry,
+            `**Session stats**\n- Messages: ${s?.totalMessages ?? 0} (${s?.userMessages ?? 0} user, ${s?.assistantMessages ?? 0} assistant)\n- Tool calls: ${s?.toolCalls ?? 0}\n- Tokens: ~${Math.round((s?.tokens?.total ?? 0) / 1000)}k\n- Cost: $${(s?.cost ?? 0).toFixed(3)}${ctx}`
+          )
+          break
+        }
+        case 'tree': {
+          const t = await entry.rpc.request<{ tree?: TreeNode[] }>({ type: 'get_tree' })
+          this.emitAssistantText(
+            sessionId,
+            entry,
+            `**Session tree**\n\n\`\`\`\n${renderTreeText(t?.tree ?? [])}\n\`\`\``
+          )
+          break
+        }
+        case 'export': {
+          const e = await entry.rpc.request<{ path?: string }>({ type: 'export_html' })
+          this.emitAssistantText(
+            sessionId,
+            entry,
+            e?.path ? `Session exported to:\n\`${e.path}\`` : 'Export failed — no path returned.'
+          )
+          break
+        }
+      }
+    } catch (err) {
+      entry.onEvent('pi:error', { sessionId, message: String(err) })
+    }
+  }
+
+  /** Render text as a one-shot assistant message (token + idle events). */
+  private emitAssistantText(sessionId: string, entry: ActiveSession, text: string): void {
+    entry.onEvent('pi:token', { sessionId, delta: text })
+    entry.onEvent('pi:idle', { sessionId })
   }
 
   /** Fetch sessionFile/sdkSessionId and prime the slash-command cache in the background. */
@@ -214,16 +406,22 @@ export class SessionService {
     entry.rpc.booted
       .then(async () => {
         await this.captureState(entry).catch(() => undefined)
+        entry.onEvent('pi:session-ready', {
+          sessionId: Array.from(this.sessions.entries()).find(([, e]) => e === entry)?.[0] ?? '',
+          sdkSessionId: entry.sdkSessionId,
+        })
         if (!entry.commandsCache) {
           await entry.rpc
             .request<{ commands?: RpcCommand[] }>({ type: 'get_commands' })
             .then((data) => {
-              entry.commandsCache = (data?.commands ?? []).map((c) => ({
-                name: c.name,
-                description: c.description ?? '',
-                source: c.source,
-                insertText: `/${c.name}`,
-              }))
+              entry.commandsCache = RPC_BUILTINS.concat(
+                (data?.commands ?? []).map((c) => ({
+                  name: c.name,
+                  description: c.description ?? '',
+                  source: c.source,
+                  insertText: `/${c.name}`,
+                }))
+              )
             })
             .catch(() => undefined)
         }
@@ -398,4 +596,41 @@ async function readCwdFromSessionFile(sessionPath: string): Promise<string> {
     console.error('[session-service] failed to read session header:', err)
   }
   return homedir()
+}
+
+/** Minimal shape of a get_tree response node. */
+interface TreeNode {
+  entry?: { id?: string; type?: string; message?: { role?: string; content?: unknown } }
+  label?: string
+  children?: TreeNode[]
+}
+
+/** Render the session entry tree as readable indented text. */
+function renderTreeText(nodes: TreeNode[], depth = 0): string {
+  const lines: string[] = []
+  for (const node of nodes) {
+    const label = node.label ? ` [${node.label}]` : ''
+    const msg = node.entry?.message
+    let summary = node.entry?.type ?? '?'
+    if (msg?.role) {
+      const text =
+        typeof msg.content === 'string'
+          ? msg.content
+          : Array.isArray(msg.content)
+            ? (msg.content as Array<{ type: string; text?: string }>)
+                .filter((c) => c.type === 'text')
+                .map((c) => c.text ?? '')
+                .join('')
+            : ''
+      const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 48)
+      summary = msg.role === 'user' ? `user: ${snippet}` : `assistant: ${snippet}`
+    } else if (node.entry?.type === 'model_change') {
+      summary = 'model change'
+    }
+    lines.push(`${'  '.repeat(depth)}• ${summary}${label}`)
+    if (node.children?.length) {
+      lines.push(...renderTreeText(node.children, depth + 1))
+    }
+  }
+  return lines.join('\n')
 }

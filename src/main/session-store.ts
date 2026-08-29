@@ -17,20 +17,47 @@ export class SessionStore {
 
   constructor(private readonly fsImpl: FsLike = fs) {}
 
-  private readModelFromJsonl(sessionPath: string): string | null {
+  /** One pass over the JSONL: latest model_change + first user message snippet. */
+  private readSessionFacts(sessionPath: string): {
+    modelId: string | null
+    firstUserSnippet: string | null
+  } {
+    let modelId: string | null = null
     try {
       const content = this.fsImpl.readFileSync(sessionPath, 'utf-8') as string
       for (const line of content.split('\n')) {
         if (!line.trim()) continue
-        const entry = JSON.parse(line) as { type: string; provider?: string; modelId?: string }
+        let entry: {
+          type?: string
+          modelId?: string
+          message?: { role?: string; content?: unknown }
+        }
+        try {
+          entry = JSON.parse(line)
+        } catch {
+          continue
+        }
         if (entry.type === 'model_change' && entry.modelId) {
-          return entry.modelId
+          modelId = entry.modelId
+        } else if (entry.type === 'message' && entry.message?.role === 'user') {
+          const c = entry.message.content
+          const text =
+            typeof c === 'string'
+              ? c
+              : Array.isArray(c)
+                ? (c as Array<{ type: string; text?: string }>)
+                    .filter((p) => p.type === 'text')
+                    .map((p) => p.text ?? '')
+                    .join('')
+                : ''
+          const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 60)
+          return { modelId, firstUserSnippet: snippet || null }
         }
       }
     } catch {
       // ignore
     }
-    return null
+    return { modelId, firstUserSnippet: null }
   }
 
   async list(activeSessionIds: string[]): Promise<SessionSummary[]> {
@@ -41,6 +68,7 @@ export class SessionStore {
       const cwdDir = dirname(info.path)
       const meta = this.readMeta(cwdDir)
       const sessionMeta = meta[info.id]
+      const facts = this.readSessionFacts(info.path)
 
       this.pathById.set(info.id, cwdDir)
       this.jsonlPathById.set(info.id, info.path)
@@ -51,10 +79,12 @@ export class SessionStore {
         cwd: info.cwd,
         cwdSlug,
         lastActiveAt: info.modified.getTime(),
-        model: this.readModelFromJsonl(info.path),
+        model: facts.modelId,
         pinned: sessionMeta?.pinned ?? false,
         tags: sessionMeta?.tags ?? [],
-        name: info.name ?? null,
+        // Prefer an explicit name; fall back to the first user message snippet
+        // (matches what the CLI shows for unnamed sessions).
+        name: info.name ?? facts.firstUserSnippet,
         isActive: activeSessionIds.includes(info.id),
       }
     })

@@ -145,6 +145,29 @@ export class IpcBridge {
       }
     )
 
+    this.handle(
+      'session:uiRespond',
+      async (
+        _e,
+        {
+          sessionId,
+          requestId,
+          response,
+        }: {
+          sessionId: string
+          requestId: string
+          response: { value?: string; confirmed?: boolean; cancelled?: boolean }
+        }
+      ) => {
+        try {
+          await this.sessions.uiRespond(sessionId, requestId, response)
+        } catch (err) {
+          console.error('[session:uiRespond]', err)
+          throw err
+        }
+      }
+    )
+
     this.handle('session:close', (_e, { sessionId }: { sessionId: string }) => {
       this.sessions.closeSession(sessionId)
     })
@@ -191,8 +214,20 @@ export class IpcBridge {
   private registerHistory(): void {
     this.handle('sessions:list', async () => {
       try {
-        const activeIds = this.sessions.getActiveSessionIds()
-        return await this.store.list(activeIds)
+        // Live sessions drive both isActive (by sdk id) and liveSessionId
+        // (the renderer tab id) so the sidebar can highlight the open tab.
+        const live = this.sessions.getActiveSessionsWithSdk()
+        const summaries = await this.store.list(
+          live.map((l) => l.sdkSessionId).filter((id): id is string => !!id)
+        )
+        const liveBySdk = new Map(
+          live.filter((l) => l.sdkSessionId).map((l) => [l.sdkSessionId as string, l.sessionId])
+        )
+        for (const summary of summaries) {
+          const liveId = liveBySdk.get(summary.id)
+          if (liveId) summary.liveSessionId = liveId
+        }
+        return summaries
       } catch (err) {
         console.error('[sessions:list]', err)
         throw err

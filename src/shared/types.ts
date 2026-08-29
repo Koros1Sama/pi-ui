@@ -113,6 +113,19 @@ export interface PiEventPayloads {
   'pi:turn-end': { sessionId: string }
   'pi:idle': { sessionId: string }
   'pi:error': { sessionId: string; message: string }
+  /** Emitted once a spawned/resumed RPC session reports its state (sidebar refresh). */
+  'pi:session-ready': { sessionId: string; sdkSessionId: string | null }
+  /** A blocking extension dialog forwarded from the pi subprocess, awaiting an answer. */
+  'pi:ui-request': {
+    sessionId: string
+    requestId: string
+    method: 'select' | 'confirm' | 'input' | 'editor'
+    title?: string
+    message?: string
+    placeholder?: string
+    prefill?: string
+    options?: string[]
+  }
   'update:checking': Record<string, never>
   'update:available': { version: string }
   'update:not-available': { version: string }
@@ -132,6 +145,8 @@ export interface SessionSummary {
   tags: string[] // from .meta.json
   name: string | null // from SDK SessionInfo.name; null = display timestamp
   isActive: boolean // true if id matches the current live session
+  /** pi-ui session id of the live tab currently running this session (if any) */
+  liveSessionId?: string | null
 }
 
 export interface SessionMeta {
@@ -157,6 +172,11 @@ export interface PiAPI {
     steer(sessionId: string, message: string): Promise<void>
     listCommands(sessionId: string): Promise<SlashCommand[]>
     setModel(sessionId: string, provider: string, modelId: string): Promise<void>
+    uiRespond(
+      sessionId: string,
+      requestId: string,
+      response: { value?: string; confirmed?: boolean; cancelled?: boolean }
+    ): Promise<void>
     abort(sessionId: string): Promise<void>
     close(sessionId: string): Promise<void>
   }

@@ -23,7 +23,7 @@ const PI_PACKAGE = '@earendil-works/pi-coding-agent'
 const CLI_RELATIVE_PATH = 'dist/bundle/cli.js'
 
 /** Extension-UI dialog methods block the extension until the client replies. */
-const DIALOG_METHODS = new Set(['select', 'confirm', 'input', 'editor'])
+export const DIALOG_UI_METHODS = new Set(['select', 'confirm', 'input', 'editor'])
 
 export interface RpcProcessOptions {
   cwd: string
@@ -117,6 +117,8 @@ interface PendingRequest {
 /**
  * One `pi --mode rpc` subprocess. Emits:
  *   - 'agent-event' (parsed non-response JSON line)
+ *   - 'ui-request'  (parsed extension_ui_request — only dialog methods, and only
+ *                    when a listener is attached; otherwise auto-cancelled)
  *   - 'exit'        (Error, only when the process died on its own)
  *   - 'error'       (Error, spawn failure)
  *   - 'stderr'      (string, raw stderr chunk — diagnostics only)
@@ -213,6 +215,11 @@ export class RpcProcess extends EventEmitter {
     })
   }
 
+  /** Write an extension_ui_response line (dialog answers from the host UI). */
+  writeUiResponse(payload: Record<string, unknown>): void {
+    this.writeJson(payload)
+  }
+
   async dispose(): Promise<void> {
     this._disposed = true
     const proc = this.proc
@@ -299,10 +306,15 @@ export class RpcProcess extends EventEmitter {
   private handleExtensionUiRequest(parsed: Record<string, unknown>): void {
     const method = String(parsed['method'] ?? '')
     const id = parsed['id']
-    // Dialog methods block the extension until answered — dismiss so the
-    // agent continues (extension receives undefined/false). Fire-and-forget
+    // Dialog methods block the extension until answered. If a host UI is
+    // attached it takes over ('ui-request'); otherwise dismiss so the agent
+    // keeps running (extension receives undefined/false). Fire-and-forget
     // methods (notify/setStatus/…) need no response.
-    if (DIALOG_METHODS.has(method) && typeof id === 'string') {
+    if (DIALOG_UI_METHODS.has(method) && typeof id === 'string') {
+      if (this.listenerCount('ui-request') > 0) {
+        this.emit('ui-request', parsed)
+        return
+      }
       try {
         this.writeJson({ type: 'extension_ui_response', id, cancelled: true })
       } catch {

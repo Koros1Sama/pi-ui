@@ -43,6 +43,10 @@ const rpcMock = vi.hoisted(() => {
       return (await shared.responder(cmd)) as T
     }
 
+    writeUiResponse(payload: Cmd): void {
+      this.written.push(payload)
+    }
+
     async dispose(): Promise<void> {
       this.disposed = true
       this.exited = true
@@ -51,7 +55,10 @@ const rpcMock = vi.hoisted(() => {
   return { FakeRpcProcess, shared }
 })
 
-vi.mock('./rpc-process', () => ({ RpcProcess: rpcMock.FakeRpcProcess }))
+vi.mock('./rpc-process', () => ({
+  RpcProcess: rpcMock.FakeRpcProcess,
+  DIALOG_UI_METHODS: new Set(['select', 'confirm', 'input', 'editor']),
+}))
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(async (p: unknown) => {
@@ -85,6 +92,41 @@ function defaultHandler(cmd: Record<string, unknown>): Promise<unknown> {
       })
     case 'switch_session':
       return Promise.resolve({ cancelled: false })
+    case 'compact':
+      return Promise.resolve({
+        summary: 'Summarized the chat',
+        tokensBefore: 150000,
+        estimatedTokensAfter: 32000,
+      })
+    case 'get_session_stats':
+      return Promise.resolve({
+        totalMessages: 10,
+        userMessages: 5,
+        assistantMessages: 5,
+        toolCalls: 12,
+        tokens: { total: 105000 },
+        cost: 0.45,
+        contextUsage: { tokens: 60000, contextWindow: 200000, percent: 30 },
+      })
+    case 'get_tree':
+      return Promise.resolve({
+        tree: [
+          {
+            entry: { type: 'message', message: { role: 'user', content: 'hello tree' } },
+            children: [
+              {
+                entry: {
+                  type: 'message',
+                  message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+                },
+                children: [],
+              },
+            ],
+          },
+        ],
+      })
+    case 'export_html':
+      return Promise.resolve({ path: '/tmp/session.html' })
     default:
       return Promise.resolve(undefined)
   }
@@ -423,6 +465,166 @@ describe('SessionService (RPC engine)', () => {
       const sessionId = service.getActiveSessionIds()[0] ?? ''
       service.closeSession(sessionId)
       expect(service.getSharedRpc()).toBeNull()
+    })
+  })
+
+  describe('built-in slash commands (RPC equivalents)', () => {
+    it('routes /compact to the RPC compact command and renders a summary', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      await service.send(sessionId, '/compact')
+      const rpc = lastRpc()
+      expect(rpc.written.some((c) => c['type'] === 'compact')).toBe(true)
+      expect(rpc.written.some((c) => c['type'] === 'prompt')).toBe(false)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({
+          sessionId,
+          delta: expect.stringContaining('Compacted'),
+        })
+      )
+      expect(onEvent).toHaveBeenCalledWith('pi:idle', { sessionId })
+    })
+
+    it('routes /name <title> to set_session_name and emits session-ready', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      await service.send(sessionId, '/name My Session')
+      expect(
+        lastRpc().written.find(
+          (c) => c['type'] === 'set_session_name' && c['name'] === 'My Session'
+        )
+      ).toBeDefined()
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:session-ready',
+        expect.objectContaining({ sessionId })
+      )
+    })
+
+    it('routes /tree to get_tree and renders the tree text', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      await service.send(sessionId, '/tree')
+      expect(lastRpc().written.some((c) => c['type'] === 'get_tree')).toBe(true)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({
+          sessionId,
+          delta: expect.stringContaining('Session tree'),
+        })
+      )
+    })
+
+    it('routes /stats and /export to their RPC commands', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/stats')
+      expect(lastRpc().written.some((c) => c['type'] === 'get_session_stats')).toBe(true)
+      await service.send(sessionId, '/export')
+      expect(lastRpc().written.some((c) => c['type'] === 'export_html')).toBe(true)
+    })
+
+    it('does not intercept non-builtin slash commands like /workflow', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/workflow tdd')
+      expect(
+        lastRpc().written.find((c) => c['type'] === 'prompt' && c['message'] === '/workflow tdd')
+      ).toBeDefined()
+    })
+
+    it('emits pi:error when a builtin command fails', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      rpcMock.shared.responder = async (cmd) => {
+        if (cmd['type'] === 'compact') throw new Error('compaction failed')
+        return defaultHandler(cmd)
+      }
+      await service.send(sessionId, '/compact')
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:error',
+        expect.objectContaining({
+          sessionId,
+          message: expect.stringContaining('compaction failed'),
+        })
+      )
+    })
+
+    it('includes builtins in listCommands output', async () => {
+      const sessionId = await createSession()
+      const cmds = await service.listCommands(sessionId)
+      const names = cmds.map((c) => c.name)
+      expect(names).toContain('compact')
+      expect(names).toContain('tree')
+      expect(names).toContain('stats')
+      expect(names).toContain('name')
+      expect(names).toContain('export')
+      expect(cmds.find((c) => c.name === 'tree')!.source).toBe('builtin')
+    })
+  })
+
+  describe('extension UI bridging', () => {
+    it('forwards dialog ui-requests as pi:ui-request', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('ui-request', {
+        type: 'extension_ui_request',
+        id: 'req-1',
+        method: 'select',
+        title: 'Pick one',
+        options: ['a', 'b'],
+      })
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:ui-request',
+        expect.objectContaining({
+          sessionId,
+          requestId: 'req-1',
+          method: 'select',
+          title: 'Pick one',
+          options: ['a', 'b'],
+        })
+      )
+    })
+
+    it('ignores fire-and-forget ui-requests (notify)', async () => {
+      await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('ui-request', {
+        type: 'extension_ui_request',
+        id: 'req-2',
+        method: 'notify',
+        message: 'hi',
+      })
+      expect(onEvent).not.toHaveBeenCalledWith('pi:ui-request', expect.anything())
+    })
+
+    it('answers dialogs via uiRespond → extension_ui_response', async () => {
+      const sessionId = await createSession()
+      await service.uiRespond(sessionId, 'req-1', { value: 'a' })
+      const resp = lastRpc().written.find((c) => c['type'] === 'extension_ui_response')
+      expect(resp).toBeDefined()
+      expect(resp!['id']).toBe('req-1')
+      expect(resp!['value']).toBe('a')
+    })
+  })
+
+  describe('session-ready', () => {
+    it('emits pi:session-ready with the sdk id after warmup', async () => {
+      onEvent.mockClear()
+      await createSession()
+      await flush()
+      await flush()
+      expect(onEvent).toHaveBeenCalledWith('pi:session-ready', {
+        sessionId: expect.any(String),
+        sdkSessionId: 'sdk-1',
+      })
+    })
+
+    it('exposes live sessions with sdk ids for sidebar highlighting', async () => {
+      await createSession()
+      await flush()
+      await flush()
+      const live = service.getActiveSessionsWithSdk()
+      expect(live).toHaveLength(1)
+      expect(live[0].sdkSessionId).toBe('sdk-1')
     })
   })
 })
