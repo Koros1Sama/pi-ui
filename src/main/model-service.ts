@@ -1,31 +1,82 @@
 // src/main/model-service.ts
-import { ModelRegistry } from '@mariozechner/pi-coding-agent'
-import type { AuthService } from './auth-service'
+//
+// Model listing backed by the real pi CLI (`get_available_models` over RPC)
+// instead of the stale bundled ModelRegistry. When a live session exists its
+// subprocess is reused (already booted, and it sees project-level provider
+// config); otherwise a long-lived "hub" subprocess is spawned at the home
+// directory and shared by all callers.
+import { homedir } from 'os'
+import { RpcProcess } from './rpc-process'
 import type { ModelEntry } from '@shared/types'
 
-type Registry = ReturnType<typeof ModelRegistry.create>
+/** Anything that can hand us an already-running RPC subprocess. */
+export interface RpcModelsHost {
+  getSharedRpc(): RpcProcess | null
+}
+
+interface RpcModel {
+  id?: string
+  name?: string
+  provider?: string
+  reasoning?: boolean
+}
 
 export class ModelService {
-  private readonly registry: Registry
+  private hub: RpcProcess | null = null
 
-  constructor(authService: AuthService) {
-    this.registry = ModelRegistry.create(authService.storage)
+  constructor(private readonly sessions?: RpcModelsHost) {}
+
+  /** Kick off the hub subprocess early so the first models:list is warm. */
+  prewarm(): void {
+    void this.ensureHub().catch((err) => {
+      console.error('[model-service] hub prewarm failed:', err)
+    })
   }
 
   async listAvailable(): Promise<ModelEntry[]> {
-    return this.registry.getAvailable().map((m) => ({
-      provider: m.provider,
-      modelId: m.id,
-      displayName: m.name,
-      supportsThinking: m.reasoning,
-    }))
+    // Prefer a live session subprocess: booted, and project-scoped providers apply.
+    const shared = this.sessions?.getSharedRpc()
+    if (shared) {
+      try {
+        return await this.fetchModels(shared)
+      } catch (err) {
+        console.error('[model-service] shared session rpc failed, falling back to hub:', err)
+      }
+    }
+    const hub = await this.ensureHub()
+    return this.fetchModels(hub)
   }
 
-  findModel(provider: string, modelId: string) {
-    return this.registry.find(provider, modelId)
+  private async fetchModels(rpc: RpcProcess): Promise<ModelEntry[]> {
+    const data = await rpc.request<{ models?: RpcModel[] }>({ type: 'get_available_models' })
+    return (data?.models ?? [])
+      .filter((m) => typeof m.id === 'string' && typeof m.provider === 'string')
+      .map((m) => ({
+        provider: m.provider as string,
+        modelId: m.id as string,
+        displayName: typeof m.name === 'string' ? m.name : (m.id as string),
+        supportsThinking: m.reasoning === true,
+      }))
   }
 
-  findModelById(modelId: string) {
-    return this.registry.getAvailable().find((m) => m.id === modelId)
+  private async ensureHub(): Promise<RpcProcess> {
+    if (this.hub && !this.hub.exited) return this.hub
+    const hub = new RpcProcess({
+      cwd: homedir(),
+      args: ['--no-session'],
+    })
+    hub.on('exit', () => {
+      if (this.hub === hub) this.hub = null
+    })
+    hub.start()
+    this.hub = hub
+    try {
+      await hub.booted
+    } catch (err) {
+      if (this.hub === hub) this.hub = null
+      await hub.dispose()
+      throw err
+    }
+    return hub
   }
 }

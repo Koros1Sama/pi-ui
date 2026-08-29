@@ -2,117 +2,185 @@
 // src/main/session-service.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SessionService } from './session-service'
-import type { ModelService } from './model-service'
-import type { SettingsService } from './settings-service'
 
-// --- SDK mock ---
-const mockPrompt = vi.fn()
-const mockSteer = vi.fn()
-const mockAbort = vi.fn()
-const mockDispose = vi.fn()
-const mockAppendSessionInfo = vi.fn()
-let capturedSubscriber: ((event: unknown) => void) | null = null
+// --- RpcProcess mock: records written commands, shared configurable responder ---
+const rpcMock = vi.hoisted(() => {
+  type Cmd = Record<string, unknown>
 
-const mockSession = {
-  prompt: mockPrompt,
-  steer: mockSteer,
-  abort: mockAbort,
-  dispose: mockDispose,
-  subscribe: vi.fn((cb: (event: unknown) => void) => {
-    capturedSubscriber = cb
-    return () => {}
+  // Shared per-test responder so tests can also steer requests made by
+  // internally-spawned instances (e.g. resumeSession's switch_session).
+  const shared = {
+    responder: async (_cmd: Cmd): Promise<unknown> => undefined,
+  }
+
+  class FakeRpcProcess {
+    static instances: Array<FakeRpcProcess> = []
+    handlers = new Map<string, Array<(payload: unknown) => void>>()
+    written: Cmd[] = []
+    disposed = false
+    exited = false
+    booted: Promise<void> = Promise.resolve()
+
+    constructor(public readonly opts: { cwd: string; args?: string[] }) {
+      FakeRpcProcess.instances.push(this)
+    }
+
+    start(): void {}
+
+    on(event: string, fn: (payload: unknown) => void): this {
+      const list = this.handlers.get(event) ?? []
+      list.push(fn)
+      this.handlers.set(event, list)
+      return this
+    }
+
+    emitCustom(event: string, payload: unknown): void {
+      for (const fn of this.handlers.get(event) ?? []) fn(payload)
+    }
+
+    async request<T = unknown>(cmd: Cmd): Promise<T> {
+      this.written.push(cmd)
+      return (await shared.responder(cmd)) as T
+    }
+
+    async dispose(): Promise<void> {
+      this.disposed = true
+      this.exited = true
+    }
+  }
+  return { FakeRpcProcess, shared }
+})
+
+vi.mock('./rpc-process', () => ({ RpcProcess: rpcMock.FakeRpcProcess }))
+
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(async (p: unknown) => {
+    if (p === '/sessions/stored.jsonl') {
+      return '{"type":"session","version":3,"id":"abc-123","timestamp":"2026-08-29T00:00:00.000Z","cwd":"D:\\\\proj"}\n'
+    }
+    throw new Error(`ENOENT: ${String(p)}`)
   }),
-  resourceLoader: {
-    getSkills: vi.fn(() => ({
-      skills: [{ name: 'test-skill', description: 'A test skill' }],
-      diagnostics: [],
-    })),
-    getPrompts: vi.fn(() => ({
-      prompts: [{ name: 'my-prompt', description: 'A prompt' }],
-      diagnostics: [],
-    })),
-  },
-  extensionRunner: undefined,
-  sessionManager: {
-    appendSessionInfo: mockAppendSessionInfo,
-  },
-}
-
-vi.mock('@mariozechner/pi-coding-agent', () => ({
-  createAgentSession: vi.fn(async () => ({ session: mockSession })),
-  DefaultResourceLoader: vi.fn().mockImplementation(function () {
-    return { reload: vi.fn().mockResolvedValue(undefined) }
-  }),
-  SessionManager: {
-    create: vi.fn(() => ({
-      getSessionId: () => 'sdk-session-1',
-      appendSessionInfo: mockAppendSessionInfo,
-    })),
-  },
 }))
 
-const fakeModel = {
-  id: 'claude-sonnet-4.6',
-  provider: 'github-copilot',
-  reasoning: true,
-  name: 'Claude',
-} as never
-const fakeModelService = { findModel: vi.fn(() => fakeModel) } as unknown as ModelService
-const fakeSettingsService = {
-  getDefaults: vi.fn(async () => ({ systemPrompt: 'Be concise.' })),
-} as unknown as SettingsService
+type FakeRpc = InstanceType<typeof rpcMock.FakeRpcProcess>
+const { FakeRpcProcess } = rpcMock
 
-describe('SessionService', () => {
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0))
+
+function defaultHandler(cmd: Record<string, unknown>): Promise<unknown> {
+  switch (cmd['type']) {
+    case 'get_state':
+      return Promise.resolve({
+        sessionId: 'sdk-1',
+        sessionFile: '/sessions/live.jsonl',
+        isStreaming: false,
+      })
+    case 'get_commands':
+      return Promise.resolve({
+        commands: [
+          { name: 'skill:brave-search', description: 'Web search via Brave API', source: 'skill' },
+          { name: 'fix-tests', description: 'Fix failing tests', source: 'prompt' },
+          { name: 'session-name', description: 'Set or clear session name', source: 'extension' },
+        ],
+      })
+    case 'switch_session':
+      return Promise.resolve({ cancelled: false })
+    default:
+      return Promise.resolve(undefined)
+  }
+}
+
+describe('SessionService (RPC engine)', () => {
   let service: SessionService
   const onEvent = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
-    capturedSubscriber = null
-    fakeModelService.findModel = vi.fn(() => fakeModel)
-    service = new SessionService(fakeModelService, fakeSettingsService)
+    FakeRpcProcess.instances.length = 0
+    rpcMock.shared.responder = defaultHandler
+    service = new SessionService()
   })
 
+  function lastRpc(): FakeRpc {
+    return FakeRpcProcess.instances[FakeRpcProcess.instances.length - 1]
+  }
+
+  async function createSession(
+    opts: Partial<Parameters<SessionService['createSession']>[0]> = {}
+  ): Promise<string> {
+    const { sessionId } = await service.createSession(
+      {
+        cwd: '/tmp/project',
+        model: 'glm-5.3',
+        provider: 'zai',
+        thinkingLevel: 'high',
+        ...opts,
+      },
+      onEvent
+    )
+    return sessionId
+  }
+
   describe('createSession', () => {
-    it('returns a sessionId', async () => {
-      const result = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-      expect(typeof result.sessionId).toBe('string')
-      expect(result.sessionId.length).toBeGreaterThan(0)
+    it('returns a sessionId and spawns an RPC subprocess in the project cwd', async () => {
+      const sessionId = await createSession()
+      expect(typeof sessionId).toBe('string')
+      expect(sessionId.length).toBeGreaterThan(0)
+      const rpc = lastRpc()
+      expect(rpc.opts.cwd).toBe('/tmp/project')
+      expect(rpc.disposed).toBe(false)
     })
 
-    it('throws when model is not found', async () => {
-      fakeModelService.findModel = vi.fn(() => undefined)
+    it('passes provider, model+thinking and name as CLI args', async () => {
+      await createSession({ name: 'My Session' })
+      const args = lastRpc().opts.args ?? []
+      expect(args).toContain('--provider')
+      expect(args[args.indexOf('--provider') + 1]).toBe('zai')
+      expect(args).toContain('--model')
+      expect(args[args.indexOf('--model') + 1]).toBe('zai/glm-5.3:high')
+      expect(args).toContain('--name')
+      expect(args[args.indexOf('--name') + 1]).toBe('My Session')
+    })
 
-      await expect(
-        service.createSession(
-          { cwd: '/tmp', model: 'bad-model', provider: 'bad', thinkingLevel: 'low' },
-          onEvent
-        )
-      ).rejects.toThrow('Model not found: bad/bad-model')
+    it('omits provider/model flags when unset', async () => {
+      await createSession({ provider: '', model: '' })
+      const args = lastRpc().opts.args ?? []
+      expect(args).not.toContain('--provider')
+      expect(args).not.toContain('--model')
     })
   })
 
   describe('send', () => {
-    it('calls session.prompt with the message', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
+    it('writes a prompt command', async () => {
+      const sessionId = await createSession()
       await service.send(sessionId, 'hello')
-      expect(mockPrompt).toHaveBeenCalledWith('hello')
+      const prompt = lastRpc()
+        .written.filter((c) => c['type'] === 'prompt')
+        .find((c) => c['message'] === 'hello')
+      expect(prompt).toBeDefined()
+      expect(prompt!['streamingBehavior']).toBeUndefined()
+    })
+
+    it('retries with streamingBehavior=steer when the agent is already streaming', async () => {
+      const sessionId = await createSession()
+      const rpc = lastRpc()
+      let prompts = 0
+      rpcMock.shared.responder = async (cmd) => {
+        if (cmd['type'] === 'prompt') {
+          prompts++
+          if (prompts === 1) {
+            throw new Error('Agent is streaming; prompt requires streamingBehavior')
+          }
+          return undefined
+        }
+        if (cmd['type'] === 'get_state') {
+          return { sessionId: 'sdk-1', sessionFile: '/sessions/live.jsonl', isStreaming: true }
+        }
+        return defaultHandler(cmd)
+      }
+      await service.send(sessionId, 'new instruction')
+      const steered = rpc.written.filter((c) => c['type'] === 'prompt')[1]
+      expect(steered['streamingBehavior']).toBe('steer')
     })
 
     it('throws for an unknown sessionId', async () => {
@@ -120,107 +188,26 @@ describe('SessionService', () => {
     })
   })
 
-  describe('abort', () => {
-    it('calls session.abort', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-      await service.abort(sessionId, onEvent)
-      expect(mockAbort).toHaveBeenCalled()
-    })
-  })
-
-  describe('event forwarding', () => {
-    it('calls onEvent with pi:token when SDK emits message_update text_delta', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-
-      capturedSubscriber!({
-        type: 'message_update',
-        assistantMessageEvent: { type: 'text_delta', delta: 'hello' },
-      })
-
-      expect(onEvent).toHaveBeenCalledWith('pi:token', { sessionId, delta: 'hello' })
-    })
-
-    it('calls onEvent with pi:idle when SDK emits agent_end', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-
-      capturedSubscriber!({ type: 'agent_end' })
-
-      expect(onEvent).toHaveBeenCalledWith('pi:idle', { sessionId })
-    })
-
-    it('calls onEvent with pi:turn-end when SDK emits turn_end', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-
-      capturedSubscriber!({ type: 'turn_end' })
-
-      expect(onEvent).toHaveBeenCalledWith('pi:turn-end', { sessionId })
-    })
-  })
-
-  describe('closeSession', () => {
-    it('calls session.dispose and removes the session', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-
-      service.closeSession(sessionId)
-
-      expect(mockDispose).toHaveBeenCalled()
-      await expect(service.send(sessionId, 'hi')).rejects.toThrow('Session not found')
-    })
-  })
-
   describe('steer', () => {
-    it('calls session.steer with the message', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
+    it('writes a steer command', async () => {
+      const sessionId = await createSession()
       await service.steer(sessionId, 'please stop')
-      expect(mockSteer).toHaveBeenCalledWith('please stop')
+      expect(
+        lastRpc().written.find((c) => c['type'] === 'steer' && c['message'] === 'please stop')
+      ).toBeDefined()
+    })
+
+    it('falls back to a plain prompt when the agent already settled', async () => {
+      const sessionId = await createSession()
+      const rpc = lastRpc()
+      rpcMock.shared.responder = async (cmd) => {
+        if (cmd['type'] === 'steer') throw new Error('Cannot steer while idle')
+        return defaultHandler(cmd)
+      }
+      await service.steer(sessionId, 'actually a new message')
+      expect(
+        rpc.written.find((c) => c['type'] === 'prompt' && c['message'] === 'actually a new message')
+      ).toBeDefined()
     })
 
     it('throws for unknown sessionId', async () => {
@@ -228,87 +215,214 @@ describe('SessionService', () => {
     })
   })
 
-  describe('listCommands', () => {
-    it('includes curated builtins', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-      const cmds = service.listCommands(sessionId)
-      const names = cmds.map((c) => c.name)
-      expect(names).toContain('compact')
-      expect(names).toContain('name')
-      expect(names).toContain('reload')
-    })
-
-    it('includes skills from resource loader', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-      const cmds = service.listCommands(sessionId)
-      const skillCmd = cmds.find((c) => c.source === 'skill')
-      expect(skillCmd).toBeDefined()
-      expect(skillCmd!.insertText).toBe('/skill:test-skill')
-    })
-
-    it('includes prompts from resource loader', async () => {
-      const { sessionId } = await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-        },
-        onEvent
-      )
-      const cmds = service.listCommands(sessionId)
-      const promptCmd = cmds.find((c) => c.source === 'prompt')
-      expect(promptCmd).toBeDefined()
-      expect(promptCmd!.insertText).toBe('/my-prompt')
-    })
-
-    it('throws for unknown sessionId', () => {
-      expect(() => service.listCommands('no-such-id')).toThrow('Session not found')
+  describe('abort', () => {
+    it('writes an abort command and emits pi:idle', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      await service.abort(sessionId, onEvent)
+      expect(lastRpc().written.some((c) => c['type'] === 'abort')).toBe(true)
+      expect(onEvent).toHaveBeenCalledWith('pi:idle', { sessionId })
     })
   })
 
-  describe('createSession with name', () => {
-    it('calls appendSessionInfo when name is provided', async () => {
-      await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
-          name: 'My Session',
-        },
-        onEvent
-      )
-      expect(mockAppendSessionInfo).toHaveBeenCalledWith('My Session')
+  describe('setModel', () => {
+    it('writes a set_model command with provider and modelId', async () => {
+      const sessionId = await createSession()
+      await service.setModel(sessionId, 'zai', 'glm-5.3')
+      expect(
+        lastRpc().written.find(
+          (c) => c['type'] === 'set_model' && c['provider'] === 'zai' && c['modelId'] === 'glm-5.3'
+        )
+      ).toBeDefined()
+    })
+  })
+
+  describe('listCommands', () => {
+    it('maps RPC get_commands entries to SlashCommand shape', async () => {
+      const sessionId = await createSession()
+      const cmds = await service.listCommands(sessionId)
+      const names = cmds.map((c) => c.name)
+      expect(names).toContain('skill:brave-search')
+      expect(names).toContain('fix-tests')
+      expect(names).toContain('session-name')
+      const skill = cmds.find((c) => c.source === 'skill')!
+      expect(skill.insertText).toBe('/skill:brave-search')
+      expect(skill.description).toBe('Web search via Brave API')
+      const extension = cmds.find((c) => c.source === 'extension')!
+      expect(extension.insertText).toBe('/session-name')
     })
 
-    it('does not call appendSessionInfo when name is omitted', async () => {
-      await service.createSession(
-        {
-          cwd: '/tmp',
-          model: 'claude-sonnet-4.6',
-          provider: 'github-copilot',
-          thinkingLevel: 'low',
+    it('caches the result — a second call does not re-request', async () => {
+      const sessionId = await createSession()
+      const rpc = lastRpc()
+      await flush() // let warmup settle
+      const before = rpc.written.filter((c) => c['type'] === 'get_commands').length
+      await service.listCommands(sessionId)
+      await service.listCommands(sessionId)
+      const after = rpc.written.filter((c) => c['type'] === 'get_commands').length
+      expect(after).toBe(before)
+    })
+
+    it('rejects for unknown sessionId', async () => {
+      await expect(service.listCommands('no-such-id')).rejects.toThrow('Session not found')
+    })
+  })
+
+  describe('event forwarding', () => {
+    it('maps message_update text_delta to pi:token', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('agent-event', {
+        type: 'message_update',
+        assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: 'hello' },
+      })
+      expect(onEvent).toHaveBeenCalledWith('pi:token', { sessionId, delta: 'hello' })
+    })
+
+    it('maps tool_execution_start / tool_execution_end to pi:tool-start / pi:tool-end', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      const rpc = lastRpc()
+      rpc.emitCustom('agent-event', {
+        type: 'tool_execution_start',
+        toolCallId: 'call_1',
+        toolName: 'bash',
+        args: { command: 'ls' },
+      })
+      expect(onEvent).toHaveBeenCalledWith('pi:tool-start', {
+        sessionId,
+        toolCallId: 'call_1',
+        toolName: 'bash',
+        args: { command: 'ls' },
+      })
+
+      rpc.emitCustom('agent-event', {
+        type: 'tool_execution_end',
+        toolCallId: 'call_1',
+        toolName: 'bash',
+        result: {
+          content: [
+            { type: 'text', text: 'total 0' },
+            { type: 'text', text: '\ndone' },
+          ],
+          details: { truncation: null, fullOutputPath: null },
         },
+        isError: false,
+      })
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:tool-end',
+        expect.objectContaining({
+          sessionId,
+          toolCallId: 'call_1',
+          toolName: 'bash',
+          result: 'total 0\ndone',
+          details: { truncation: null, fullOutputPath: null },
+          isError: false,
+        })
+      )
+    })
+
+    it('stringifies a string tool result directly', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('agent-event', {
+        type: 'tool_execution_end',
+        toolCallId: 'call_2',
+        toolName: 'read',
+        result: 'plain text',
+        isError: true,
+      })
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:tool-end',
+        expect.objectContaining({ sessionId, result: 'plain text', isError: true, details: null })
+      )
+    })
+
+    it('maps turn_end to pi:turn-end', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('agent-event', { type: 'turn_end' })
+      expect(onEvent).toHaveBeenCalledWith('pi:turn-end', { sessionId })
+    })
+
+    it('maps agent_end and agent_settled to pi:idle', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('agent-event', { type: 'agent_end' })
+      lastRpc().emitCustom('agent-event', { type: 'agent_settled' })
+      expect(onEvent).toHaveBeenCalledWith('pi:idle', { sessionId })
+      expect(onEvent).toHaveBeenCalledTimes(2)
+    })
+
+    it('maps extension_error to pi:error', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('agent-event', {
+        type: 'extension_error',
+        extensionPath: '/ext.ts',
+        event: 'tool_call',
+        error: 'boom',
+      })
+      expect(onEvent).toHaveBeenCalledWith('pi:error', { sessionId, message: 'boom' })
+    })
+  })
+
+  describe('closeSession', () => {
+    it('disposes the subprocess and removes the session', async () => {
+      const sessionId = await createSession()
+      const rpc = lastRpc()
+      service.closeSession(sessionId)
+      expect(rpc.disposed).toBe(true)
+      await expect(service.send(sessionId, 'hi')).rejects.toThrow('Session not found')
+    })
+  })
+
+  describe('unexpected exit', () => {
+    it('emits pi:error and drops the session when no session file is known', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      const rpc = lastRpc()
+      rpc.exited = true
+      rpc.emitCustom('exit', new Error('crashed'))
+      expect(onEvent).toHaveBeenCalledWith('pi:error', expect.objectContaining({ sessionId }))
+      await expect(service.send(sessionId, 'hi')).rejects.toThrow('Session not found')
+    })
+  })
+
+  describe('resumeSession', () => {
+    it('spawns at the stored cwd, switches onto the session file and reports the sdk id', async () => {
+      const { sessionId, sdkSessionId } = await service.resumeSession(
+        '/sessions/stored.jsonl',
         onEvent
       )
-      expect(mockAppendSessionInfo).not.toHaveBeenCalled()
+      expect(typeof sessionId).toBe('string')
+      expect(sdkSessionId).toBe('sdk-1')
+      const rpc = lastRpc()
+      expect(rpc.opts.cwd).toBe('D:\\proj')
+      expect(
+        rpc.written.find(
+          (c) => c['type'] === 'switch_session' && c['sessionPath'] === '/sessions/stored.jsonl'
+        )
+      ).toBeDefined()
+    })
+
+    it('throws when an extension cancels the switch', async () => {
+      rpcMock.shared.responder = async (cmd) =>
+        cmd['type'] === 'switch_session' ? { cancelled: true } : defaultHandler(cmd)
+      await expect(service.resumeSession('/sessions/stored.jsonl', onEvent)).rejects.toThrow(
+        'cancelled'
+      )
+    })
+  })
+
+  describe('getSharedRpc', () => {
+    it('exposes a live session subprocess for the model service', async () => {
+      expect(service.getSharedRpc()).toBeNull()
+      await createSession()
+      expect(service.getSharedRpc()).toBeInstanceOf(FakeRpcProcess)
+      const sessionId = service.getActiveSessionIds()[0] ?? ''
+      service.closeSession(sessionId)
+      expect(service.getSharedRpc()).toBeNull()
     })
   })
 })

@@ -1,23 +1,13 @@
 // src/main/session-store.ts
-import {
-  SessionManager,
-  createAgentSession,
-  DefaultResourceLoader,
-} from '@mariozechner/pi-coding-agent'
+//
+// Session history listing / metadata / message replay — pure file operations
+// over the pi session JSONL files. Live session execution (create/resume)
+// moved to SessionService's RPC subprocess engine.
+import { SessionManager } from '@mariozechner/pi-coding-agent'
 import * as fs from 'fs'
 import { dirname, basename, join } from 'path'
 import { randomUUID } from 'crypto'
-import type {
-  SessionSummary,
-  SessionMeta,
-  Message,
-  ToolCall,
-  PiEventName,
-  PiEventPayloads,
-} from '@shared/types'
-import type { ModelService } from './model-service'
-
-type EventCallback = <E extends PiEventName>(event: E, payload: PiEventPayloads[E]) => void
+import type { SessionSummary, SessionMeta, Message, ToolCall } from '@shared/types'
 
 export type FsLike = Pick<typeof fs, 'existsSync' | 'readFileSync' | 'writeFileSync' | 'mkdirSync'>
 
@@ -35,22 +25,6 @@ export class SessionStore {
         const entry = JSON.parse(line) as { type: string; provider?: string; modelId?: string }
         if (entry.type === 'model_change' && entry.modelId) {
           return entry.modelId
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return null
-  }
-
-  private readProviderFromJsonl(sessionPath: string): string | null {
-    try {
-      const content = this.fsImpl.readFileSync(sessionPath, 'utf-8') as string
-      for (const line of content.split('\n')) {
-        if (!line.trim()) continue
-        const entry = JSON.parse(line) as { type: string; provider?: string; modelId?: string }
-        if (entry.type === 'model_change' && entry.provider) {
-          return entry.provider
         }
       }
     } catch {
@@ -131,31 +105,6 @@ export class SessionStore {
     const manager = SessionManager.open(sessionPath)
     const context = manager.buildSessionContext()
     return this.convertMessages(context.messages)
-  }
-
-  async resume(
-    sessionPath: string,
-    modelService: ModelService,
-    _onEvent: EventCallback
-  ): Promise<{ sessionId: string; sdkSession: unknown }> {
-    const manager = SessionManager.open(sessionPath)
-    const cwd = manager.getCwd()
-    const loader = new DefaultResourceLoader({ cwd })
-    // Read model+provider from the session JSONL and look up the full model object
-    const modelId = this.readModelFromJsonl(sessionPath)
-    const provider = this.readProviderFromJsonl(sessionPath)
-    const model =
-      modelId && provider
-        ? modelService.findModel(provider, modelId)
-        : modelId
-          ? modelService.findModelById(modelId)
-          : undefined
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const opts: any = { cwd, resourceLoader: loader, sessionManager: manager }
-    if (model) opts.model = model
-    const { session } = await createAgentSession(opts)
-    const sessionId = randomUUID()
-    return { sessionId, sdkSession: session }
   }
 
   private metaPath(cwdDir: string): string {

@@ -130,6 +130,21 @@ export class IpcBridge {
       await this.sessions.abort(sessionId, (event, payload) => this.sendToRenderer(event, payload))
     })
 
+    this.handle(
+      'session:setModel',
+      async (
+        _e,
+        { sessionId, provider, modelId }: { sessionId: string; provider: string; modelId: string }
+      ) => {
+        try {
+          await this.sessions.setModel(sessionId, provider, modelId)
+        } catch (err) {
+          console.error('[session:setModel]', err)
+          throw err
+        }
+      }
+    )
+
     this.handle('session:close', (_e, { sessionId }: { sessionId: string }) => {
       this.sessions.closeSession(sessionId)
     })
@@ -214,19 +229,8 @@ export class IpcBridge {
 
     this.handle('session:resume', async (_e, { sessionPath }: { sessionPath: string }) => {
       try {
-        const { sessionId, sdkSession } = await this.store.resume(
-          sessionPath,
-          this.models,
-          (event, payload) => this.sendToRenderer(event, payload)
-        )
-        const manager = (sdkSession as { sessionManager?: { getSessionId(): string } })
-          .sessionManager
-        const sdkSessionId = manager?.getSessionId() ?? sessionId
-        this.sessions.registerResumedSession(
-          sessionId,
-          sdkSession,
-          sdkSessionId,
-          (event, payload) => this.sendToRenderer(event, payload)
+        const { sessionId } = await this.sessions.resumeSession(sessionPath, (event, payload) =>
+          this.sendToRenderer(event, payload)
         )
         return { sessionId }
       } catch (err) {

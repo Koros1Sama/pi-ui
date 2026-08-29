@@ -32,14 +32,18 @@ async function createWindow(): Promise<void> {
   })
 
   const auth = new AuthService()
-  const models = new ModelService(auth)
   const settings = new SettingsService()
   const prefs = new PreferencesService(app.getPath('userData'))
-  const sessions = new SessionService(models, settings)
+  const sessions = new SessionService()
+  const models = new ModelService(sessions)
 
   const store = new SessionStore()
   const bridge = new IpcBridge(win, auth, models, settings, prefs, sessions, store)
   bridge.register()
+
+  // Boot the shared model-listing hub early (off the critical path — it
+  // loads user extensions and can take ~20s on a rich setup).
+  models.prewarm()
 
   // Auto-updater — skip in dev and E2E
   let updater: import('./update-service').UpdateService | null = null
