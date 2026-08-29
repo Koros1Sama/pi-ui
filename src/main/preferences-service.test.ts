@@ -1,6 +1,7 @@
 // @vitest-environment node
 // src/main/preferences-service.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { join } from 'path'
 import { PreferencesService } from './preferences-service'
 
 const mockReadFile = vi.fn()
@@ -51,7 +52,7 @@ describe('PreferencesService', () => {
 
       const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string)
       expect(written.lastUsedDirectory).toBe('/new/path')
-      expect(mockWriteFile.mock.calls[0][0]).toBe('/fake/userData/preferences.json')
+      expect(mockWriteFile.mock.calls[0][0]).toBe(join('/fake/userData', 'preferences.json'))
     })
   })
 })
