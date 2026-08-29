@@ -8,7 +8,10 @@ interface Props {
   cwd: string
   sessions: SessionSummary[]
   expanded: boolean
-  selectedSessionId: string | null
+  /** pi-ui tab id of the active live session (highlight match), if any */
+  selectedLiveId: string | null
+  /** sdk session id of the active past-session tab (highlight match), if any */
+  selectedSdkId: string | null
   onToggle(): void
   onSelectSession(session: SessionSummary): void
   onRenameSession(session: SessionSummary, name: string): void
@@ -25,13 +28,20 @@ export default function CwdGroup({
   cwd,
   sessions,
   expanded,
-  selectedSessionId,
+  selectedLiveId,
+  selectedSdkId,
   onToggle,
   onSelectSession,
   onRenameSession,
   onTogglePinSession,
   onDeleteSession,
 }: Props) {
+  function isSelected(session: SessionSummary): boolean {
+    return (
+      (selectedLiveId != null && session.liveSessionId === selectedLiveId) ||
+      (selectedSdkId != null && session.id === selectedSdkId)
+    )
+  }
   const sorted = [...sessions].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1
     if (!a.pinned && b.pinned) return 1
@@ -60,7 +70,7 @@ export default function CwdGroup({
             <SessionEntry
               key={session.id}
               session={session}
-              isSelected={session.id === selectedSessionId}
+              isSelected={isSelected(session)}
               onClick={() => onSelectSession(session)}
               onRename={(name) => onRenameSession(session, name)}
               onTogglePin={() => onTogglePinSession(session)}

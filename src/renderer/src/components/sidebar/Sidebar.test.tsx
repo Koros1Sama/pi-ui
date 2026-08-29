@@ -22,12 +22,17 @@ const mockStore = {
     models: [],
     providers: [],
   },
+  ui: {
+    sessionViewMode: 'grouped' as const,
+    extensionDialog: null,
+  },
   toggleCwdExpanded: vi.fn(),
   setSessions: vi.fn(),
   createTab: vi.fn(),
   setActiveTab: vi.fn(),
   setTabMessages: vi.fn(),
   setTabMode: vi.fn(),
+  setSessionViewMode: vi.fn(),
 }
 
 beforeEach(() => {
