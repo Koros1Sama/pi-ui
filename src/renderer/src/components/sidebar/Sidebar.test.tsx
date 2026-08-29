@@ -1,5 +1,6 @@
 // src/renderer/src/components/sidebar/Sidebar.test.tsx
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useStore } from '@/store'
 import Sidebar from './Sidebar'
@@ -55,5 +56,18 @@ describe('Sidebar', () => {
   it('shows empty state when no sessions', () => {
     render(<Sidebar />)
     expect(screen.getByText(/no sessions yet/i)).toBeInTheDocument()
+  })
+
+  it('renders view mode toggle and refresh controls', () => {
+    render(<Sidebar />)
+    expect(screen.getByTestId('view-grouped-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('view-recent-btn')).toBeInTheDocument()
+    expect(screen.getByTestId('sessions-refresh-btn')).toBeInTheDocument()
+  })
+
+  it('switches to the recent view on toggle click', async () => {
+    render(<Sidebar />)
+    await userEvent.click(screen.getByTestId('view-recent-btn'))
+    expect(mockStore.setSessionViewMode).toHaveBeenCalledWith('recent')
   })
 })
