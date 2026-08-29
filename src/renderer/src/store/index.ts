@@ -9,6 +9,8 @@ import {
   type ConfigActions,
 } from './config-slice'
 import { initialUiState, createUiSlice, type UiState, type UiActions } from './ui-slice'
+
+export type { SessionViewMode, ExtensionDialog } from './ui-slice'
 import {
   initialHistoryState,
   createHistorySlice,

@@ -69,6 +69,7 @@ export default function InputArea() {
   // Slash command state
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
   const [slashActiveIndex, setSlashActiveIndex] = useState(0)
+  const [slashArgs, setSlashArgs] = useState('')
   const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([])
   const commandCacheRef = useRef<{ tabId: string; commands: SlashCommand[] } | null>(null)
 
@@ -82,13 +83,15 @@ export default function InputArea() {
   const canSend = hasContent
 
   function filterCommands(query: string, allCommands: SlashCommand[]): SlashCommand[] {
+    // Match on the command token only — anything after the first space is
+    // an argument, so the menu stays visible while arguments are typed.
     const q = query.toLowerCase()
     return allCommands.filter(
       (c) => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)
     )
   }
 
-  async function openSlashMenu(query: string) {
+  async function openSlashMenu(token: string, args: string) {
     if (!tab) return
     const tabId = tab.id
     const sessionId = tab.sessionId
@@ -96,8 +99,9 @@ export default function InputArea() {
       const cmds = await window.pi.session.listCommands(sessionId)
       commandCacheRef.current = { tabId, commands: cmds }
     }
-    const filtered = filterCommands(query, commandCacheRef.current.commands)
+    const filtered = filterCommands(token, commandCacheRef.current.commands)
     setFilteredCommands(filtered)
+    setSlashArgs(args)
     setSlashActiveIndex(0)
     setSlashMenuOpen(true)
   }
@@ -165,8 +169,11 @@ export default function InputArea() {
   function handleChange(newValue: string) {
     setValue(newValue)
     if (newValue.startsWith('/')) {
-      const query = newValue.slice(1)
-      void openSlashMenu(query)
+      const rest = newValue.slice(1)
+      const spaceIndex = rest.indexOf(' ')
+      const token = spaceIndex === -1 ? rest : rest.slice(0, spaceIndex)
+      const args = spaceIndex === -1 ? '' : rest.slice(spaceIndex + 1)
+      void openSlashMenu(token, args)
     } else {
       closeSlashMenu()
     }
@@ -186,7 +193,11 @@ export default function InputArea() {
       }
       if (e.key === 'Enter') {
         e.preventDefault()
-        if (filteredCommands[slashActiveIndex]) {
+        if (slashArgs) {
+          // Arguments typed after the command — send the text as-is
+          // (e.g. "/name my title", "/workflow tdd").
+          void send()
+        } else if (filteredCommands[slashActiveIndex]) {
           handleSlashSelect(filteredCommands[slashActiveIndex])
         }
         return
@@ -276,6 +287,7 @@ export default function InputArea() {
               activeIndex={slashActiveIndex}
               onSelect={handleSlashSelect}
               onDismiss={closeSlashMenu}
+              args={slashArgs || undefined}
             />
           )}
           <textarea

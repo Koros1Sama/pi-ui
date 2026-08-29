@@ -9,6 +9,20 @@ export type UpdateStatus =
   | 'up-to-date'
   | 'error'
 
+export type SessionViewMode = 'grouped' | 'recent'
+
+/** A blocking extension dialog forwarded from the pi subprocess. */
+export interface ExtensionDialog {
+  sessionId: string
+  requestId: string
+  method: 'select' | 'confirm' | 'input' | 'editor'
+  title?: string
+  message?: string
+  placeholder?: string
+  prefill?: string
+  options?: string[]
+}
+
 export interface UiState {
   settingsOpen: boolean
   newSessionOpen: boolean
@@ -16,6 +30,8 @@ export interface UiState {
   updateVersion: string | null
   updateProgress: number | null
   updateError: string | null
+  sessionViewMode: SessionViewMode
+  extensionDialog: ExtensionDialog | null
 }
 
 export interface UiActions {
@@ -29,6 +45,8 @@ export interface UiActions {
     progress?: number | null,
     error?: string | null
   ): void
+  setSessionViewMode(mode: SessionViewMode): void
+  setExtensionDialog(dialog: ExtensionDialog | null): void
 }
 
 export const initialUiState: UiState = {
@@ -38,6 +56,8 @@ export const initialUiState: UiState = {
   updateVersion: null,
   updateProgress: null,
   updateError: null,
+  sessionViewMode: 'grouped',
+  extensionDialog: null,
 }
 
 export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): UiActions => ({
@@ -63,5 +83,13 @@ export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): 
       if (version !== undefined) s.ui.updateVersion = version
       if (progress !== undefined) s.ui.updateProgress = progress
       if (error !== undefined) s.ui.updateError = error
+    }),
+  setSessionViewMode: (mode) =>
+    set((s) => {
+      s.ui.sessionViewMode = mode
+    }),
+  setExtensionDialog: (dialog) =>
+    set((s) => {
+      s.ui.extensionDialog = dialog
     }),
 })

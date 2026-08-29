@@ -10,12 +10,14 @@ import UpdateBanner from './components/UpdateBanner'
 import DiffPane from './components/diff/DiffPane'
 import NewSessionDialog from './components/modals/NewSessionDialog'
 import SettingsModal from './components/modals/SettingsModal'
+import ExtensionUIDialog from './components/modals/ExtensionUIDialog'
 
 export default function App() {
   const setConfig = useStore((s) => s.setConfig)
   const setModels = useStore((s) => s.setModels)
   const openSettings = useStore((s) => s.openSettings)
   const setSessions = useStore((s) => s.setSessions)
+  const setExtensionDialog = useStore((s) => s.setExtensionDialog)
   const tabCount = useStore((s) => s.tabs.tabs.length)
 
   // Register global pi event listeners (routes to correct tab by sessionId)
@@ -51,6 +53,21 @@ export default function App() {
     loadSessions()
   }, [tabCount, loadSessions])
 
+  // Live sessions report their sdk id once booted — refresh so the sidebar
+  // highlight and isActive flags become accurate without polling.
+  useEffect(() => {
+    const offReady = window.pi.on('pi:session-ready', () => {
+      void loadSessions()
+    })
+    const offUi = window.pi.on('pi:ui-request', (payload) => {
+      setExtensionDialog(payload)
+    })
+    return () => {
+      offReady()
+      offUi()
+    }
+  }, [loadSessions, setExtensionDialog])
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
@@ -75,6 +92,7 @@ export default function App() {
       </div>
       <NewSessionDialog />
       <SettingsModal />
+      <ExtensionUIDialog />
     </div>
   )
 }
