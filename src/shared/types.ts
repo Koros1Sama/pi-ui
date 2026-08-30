@@ -79,6 +79,10 @@ export interface SlashCommand {
   description: string
   source: 'builtin' | 'skill' | 'prompt' | 'extension'
   insertText: string
+  /** Known argument choices offered as completions (e.g. workflow ids) */
+  argChoices?: string[]
+  /** Short hint about the argument (e.g. "workflow id") */
+  argHint?: string
 }
 
 export interface ToolCall {
@@ -126,6 +130,10 @@ export interface PiEventPayloads {
     prefill?: string
     options?: string[]
   }
+  /** Fire-and-forget extension notification, surfaced as a toast. */
+  'pi:notify': { sessionId: string; message: string; level: string }
+  /** Interactive session-tree picker (fork points from /tree). */
+  'pi:tree-picker': { sessionId: string; nodes: TreePickerNode[] }
   'update:checking': Record<string, never>
   'update:available': { version: string }
   'update:not-available': { version: string }
@@ -156,6 +164,17 @@ export interface SessionMeta {
   }
 }
 
+/** One entry of the session tree shown by the /tree picker. */
+export interface TreePickerNode {
+  id: string
+  role: string
+  text: string
+  label?: string
+  depth: number
+  /** user messages are fork points */
+  clickable: boolean
+}
+
 export type PiEventName = keyof PiEventPayloads
 
 /** The window.pi API exposed by the preload script */
@@ -177,6 +196,7 @@ export interface PiAPI {
       requestId: string,
       response: { value?: string; confirmed?: boolean; cancelled?: boolean }
     ): Promise<void>
+    fork(sessionId: string, entryId: string): Promise<{ messages: Message[] }>
     abort(sessionId: string): Promise<void>
     close(sessionId: string): Promise<void>
   }

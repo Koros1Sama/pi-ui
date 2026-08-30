@@ -60,6 +60,13 @@ vi.mock('./rpc-process', () => ({
   DIALOG_UI_METHODS: new Set(['select', 'confirm', 'input', 'editor']),
 }))
 
+vi.mock('./command-args', () => ({
+  withArgSpec: (cmd: { name: string }) => ({
+    ...cmd,
+    ...(cmd.name === 'workflow' ? { argChoices: ['tdd', 'pipeline'], argHint: 'workflow id' } : {}),
+  }),
+}))
+
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(async (p: unknown) => {
     if (p === '/sessions/stored.jsonl') {
@@ -88,6 +95,18 @@ function defaultHandler(cmd: Record<string, unknown>): Promise<unknown> {
           { name: 'skill:brave-search', description: 'Web search via Brave API', source: 'skill' },
           { name: 'fix-tests', description: 'Fix failing tests', source: 'prompt' },
           { name: 'session-name', description: 'Set or clear session name', source: 'extension' },
+          {
+            name: 'workflow',
+            description: 'List or run a predefined workflow',
+            source: 'extension',
+          },
+        ],
+      })
+    case 'get_messages':
+      return Promise.resolve({
+        messages: [
+          { role: 'user', content: 'rebuild me', timestamp: 1 },
+          { role: 'assistant', content: [{ type: 'text', text: 'fork reply' }] },
         ],
       })
     case 'switch_session':
@@ -112,12 +131,20 @@ function defaultHandler(cmd: Record<string, unknown>): Promise<unknown> {
       return Promise.resolve({
         tree: [
           {
-            entry: { type: 'message', message: { role: 'user', content: 'hello tree' } },
+            entry: {
+              id: 'e1',
+              type: 'message',
+              message: { role: 'user', content: 'hello tree' },
+            },
             children: [
               {
                 entry: {
+                  id: 'e2',
                   type: 'message',
-                  message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+                  message: {
+                    role: 'assistant',
+                    content: [{ type: 'text', text: 'hi' }],
+                  },
                 },
                 children: [],
               },
@@ -625,6 +652,74 @@ describe('SessionService (RPC engine)', () => {
       const live = service.getActiveSessionsWithSdk()
       expect(live).toHaveLength(1)
       expect(live[0].sdkSessionId).toBe('sdk-1')
+    })
+  })
+
+  describe('argument enrichment', () => {
+    it('attaches workflow arg choices from the catalog', async () => {
+      const sessionId = await createSession()
+      const cmds = await service.listCommands(sessionId)
+      const wf = cmds.find((c) => c.name === 'workflow')
+      expect(wf?.argChoices).toEqual(['tdd', 'pipeline'])
+      expect(wf?.argHint).toBe('workflow id')
+    })
+  })
+
+  describe('tree picker + fork', () => {
+    it('emits pi:tree-picker with clickable user nodes on /tree', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      await service.send(sessionId, '/tree')
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:tree-picker',
+        expect.objectContaining({
+          sessionId,
+          nodes: expect.arrayContaining([
+            expect.objectContaining({ role: 'user', clickable: true, text: 'hello tree' }),
+            expect.objectContaining({ role: 'assistant', clickable: false }),
+          ]),
+        })
+      )
+    })
+
+    it('forkFrom writes fork + get_messages and returns the rebuilt chat', async () => {
+      const sessionId = await createSession()
+      const { messages } = await service.forkFrom(sessionId, 'entry-1')
+      const rpc = lastRpc()
+      expect(
+        rpc.written.find((c) => c['type'] === 'fork' && c['entryId'] === 'entry-1')
+      ).toBeDefined()
+      expect(rpc.written.some((c) => c['type'] === 'get_messages')).toBe(true)
+      expect(messages.map((m) => m.role)).toEqual(['user', 'assistant'])
+      expect(messages[1]!.content).toBe('fork reply')
+    })
+
+    it('throws when an extension cancels the fork', async () => {
+      const sessionId = await createSession()
+      rpcMock.shared.responder = async (cmd) => {
+        if (cmd['type'] === 'fork') return { cancelled: true }
+        return defaultHandler(cmd)
+      }
+      await expect(service.forkFrom(sessionId, 'e1')).rejects.toThrow('cancelled')
+    })
+  })
+
+  describe('notify forwarding', () => {
+    it('surfaces extension notify requests as pi:notify', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('ui-request', {
+        type: 'extension_ui_request',
+        id: 'n1',
+        method: 'notify',
+        message: 'requires interactive TUI mode',
+        notifyType: 'error',
+      })
+      expect(onEvent).toHaveBeenCalledWith('pi:notify', {
+        sessionId,
+        message: 'requires interactive TUI mode',
+        level: 'error',
+      })
     })
   })
 })

@@ -105,6 +105,7 @@ if (process.env['PI_E2E']) {
       listCommands: async () => [],
       setModel: async () => {},
       uiRespond: async () => {},
+      fork: async () => ({ messages: [] }),
       abort: async (sessionId) => {
         emit('pi:idle', { sessionId })
       },
@@ -215,6 +216,7 @@ if (process.env['PI_E2E']) {
         ipcRenderer.invoke('session:setModel', { sessionId, provider, modelId }),
       uiRespond: (sessionId, requestId, response) =>
         ipcRenderer.invoke('session:uiRespond', { sessionId, requestId, response }),
+      fork: (sessionId, entryId) => ipcRenderer.invoke('session:fork', { sessionId, entryId }),
       abort: (sessionId) => ipcRenderer.invoke('session:abort', { sessionId }),
       close: (sessionId) => ipcRenderer.invoke('session:close', { sessionId }),
     },

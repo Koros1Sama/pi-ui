@@ -13,6 +13,8 @@ import { randomUUID } from 'crypto'
 import { readFile } from 'fs/promises'
 import { homedir } from 'os'
 import { RpcProcess, DIALOG_UI_METHODS } from './rpc-process'
+import { withArgSpec } from './command-args'
+import { convertAgentMessages } from './agent-messages'
 import type { PiEventName, PiEventPayloads, SlashCommand, ToolResultDetails } from '@shared/types'
 import type { AppThinkingLevel } from '@shared/types'
 
@@ -173,16 +175,37 @@ export class SessionService {
     const entry = this.getOrThrow(sessionId)
     if (entry.commandsCache) return entry.commandsCache
     const data = await entry.rpc.request<{ commands?: RpcCommand[] }>({ type: 'get_commands' })
-    const commands = RPC_BUILTINS.concat(
-      (data?.commands ?? []).map((c) => ({
+    const commands = this.enrichCommands(entry, data?.commands ?? [])
+    entry.commandsCache = commands
+    return commands
+  }
+
+  /** Merge builtins + arg specs (workflow ids etc.) onto the RPC command list. */
+  private enrichCommands(entry: ActiveSession, rpcCommands: RpcCommand[]): SlashCommand[] {
+    return RPC_BUILTINS.concat(
+      rpcCommands.map((c) => ({
         name: c.name,
         description: c.description ?? '',
         source: c.source,
         insertText: `/${c.name}`,
       }))
-    )
-    entry.commandsCache = commands
-    return commands
+    ).map((c) => withArgSpec(c, entry.cwd))
+  }
+
+  /** Fork the session from a previous user message; returns the rebuilt chat. */
+  async forkFrom(
+    sessionId: string,
+    entryId: string
+  ): Promise<{ messages: import('@shared/types').Message[] }> {
+    const entry = this.getOrThrow(sessionId)
+    const result = await entry.rpc.request<{ cancelled?: boolean }>({ type: 'fork', entryId })
+    if (result?.cancelled) throw new Error('Fork cancelled by an extension')
+    const data = await entry.rpc.request<{ messages?: unknown[] }>({ type: 'get_messages' })
+    entry.onEvent('pi:session-ready', {
+      sessionId,
+      sdkSessionId: entry.sdkSessionId,
+    })
+    return { messages: convertAgentMessages(data?.messages ?? []) }
   }
 
   /**
@@ -288,8 +311,19 @@ export class SessionService {
   ): void {
     const method = String(req['method'] ?? '')
     const requestId = req['id']
-    if (!DIALOG_UI_METHODS.has(method) || typeof requestId !== 'string') return
+    if (typeof requestId !== 'string') return
     const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+    if (method === 'notify') {
+      // Fire-and-forget notifications surface as a toast so extension errors
+      // (e.g. TUI-only commands like /btw) are not swallowed silently.
+      entry.onEvent('pi:notify', {
+        sessionId,
+        message: str(req['message']) ?? '',
+        level: str(req['notifyType']) ?? 'info',
+      })
+      return
+    }
+    if (!DIALOG_UI_METHODS.has(method)) return
     entry.onEvent('pi:ui-request', {
       sessionId,
       requestId,
@@ -378,6 +412,11 @@ export class SessionService {
             entry,
             `**Session tree**\n\n\`\`\`\n${renderTreeText(t?.tree ?? [])}\n\`\`\``
           )
+          // Interactive branch picker: user-message nodes are fork points.
+          entry.onEvent('pi:tree-picker', {
+            sessionId,
+            nodes: flattenTree(t?.tree ?? []),
+          })
           break
         }
         case 'export': {
@@ -414,14 +453,7 @@ export class SessionService {
           await entry.rpc
             .request<{ commands?: RpcCommand[] }>({ type: 'get_commands' })
             .then((data) => {
-              entry.commandsCache = RPC_BUILTINS.concat(
-                (data?.commands ?? []).map((c) => ({
-                  name: c.name,
-                  description: c.description ?? '',
-                  source: c.source,
-                  insertText: `/${c.name}`,
-                }))
-              )
+              entry.commandsCache = this.enrichCommands(entry, data?.commands ?? [])
             })
             .catch(() => undefined)
         }
@@ -603,6 +635,57 @@ interface TreeNode {
   entry?: { id?: string; type?: string; message?: { role?: string; content?: unknown } }
   label?: string
   children?: TreeNode[]
+}
+
+/** Flatten the tree for the interactive picker; user messages are fork points. */
+function flattenTree(
+  nodes: TreeNode[],
+  depth = 0
+): Array<{
+  id: string
+  role: string
+  text: string
+  label?: string
+  depth: number
+  clickable: boolean
+}> {
+  const result: Array<{
+    id: string
+    role: string
+    text: string
+    label?: string
+    depth: number
+    clickable: boolean
+  }> = []
+  for (const node of nodes) {
+    const msg = node.entry?.message
+    const role = msg?.role ?? node.entry?.type ?? ''
+    const text =
+      typeof msg?.content === 'string'
+        ? msg.content
+        : Array.isArray(msg?.content)
+          ? (msg.content as Array<{ type: string; text?: string }>)
+              .filter((c) => c.type === 'text')
+              .map((c) => c.text ?? '')
+              .join('')
+          : ''
+    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 90)
+    const id = node.entry?.id ?? ''
+    if (id) {
+      result.push({
+        id,
+        role,
+        text: snippet,
+        label: node.label,
+        depth,
+        clickable: msg?.role === 'user',
+      })
+    }
+    if (node.children?.length) {
+      result.push(...flattenTree(node.children, depth + 1))
+    }
+  }
+  return result
 }
 
 /** Render the session entry tree as readable indented text. */

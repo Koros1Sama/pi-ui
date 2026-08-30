@@ -168,6 +168,18 @@ export class IpcBridge {
       }
     )
 
+    this.handle(
+      'session:fork',
+      async (_e, { sessionId, entryId }: { sessionId: string; entryId: string }) => {
+        try {
+          return await this.sessions.forkFrom(sessionId, entryId)
+        } catch (err) {
+          console.error('[session:fork]', err)
+          throw err
+        }
+      }
+    )
+
     this.handle('session:close', (_e, { sessionId }: { sessionId: string }) => {
       this.sessions.closeSession(sessionId)
     })
