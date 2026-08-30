@@ -11,6 +11,8 @@ import DiffPane from './components/diff/DiffPane'
 import NewSessionDialog from './components/modals/NewSessionDialog'
 import SettingsModal from './components/modals/SettingsModal'
 import ExtensionUIDialog from './components/modals/ExtensionUIDialog'
+import TreePickerDialog from './components/modals/TreePickerDialog'
+import Toast from './components/Toast'
 
 export default function App() {
   const setConfig = useStore((s) => s.setConfig)
@@ -18,6 +20,8 @@ export default function App() {
   const openSettings = useStore((s) => s.openSettings)
   const setSessions = useStore((s) => s.setSessions)
   const setExtensionDialog = useStore((s) => s.setExtensionDialog)
+  const setTreePicker = useStore((s) => s.setTreePicker)
+  const setToast = useStore((s) => s.setToast)
   const tabCount = useStore((s) => s.tabs.tabs.length)
 
   // Register global pi event listeners (routes to correct tab by sessionId)
@@ -62,11 +66,19 @@ export default function App() {
     const offUi = window.pi.on('pi:ui-request', (payload) => {
       setExtensionDialog(payload)
     })
+    const offTree = window.pi.on('pi:tree-picker', (payload) => {
+      setTreePicker(payload)
+    })
+    const offNotify = window.pi.on('pi:notify', (payload) => {
+      setToast({ message: payload.message, level: payload.level })
+    })
     return () => {
       offReady()
       offUi()
+      offTree()
+      offNotify()
     }
-  }, [loadSessions, setExtensionDialog])
+  }, [loadSessions, setExtensionDialog, setTreePicker, setToast])
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -93,6 +105,8 @@ export default function App() {
       <NewSessionDialog />
       <SettingsModal />
       <ExtensionUIDialog />
+      <TreePickerDialog />
+      <Toast />
     </div>
   )
 }

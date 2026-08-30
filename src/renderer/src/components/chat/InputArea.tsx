@@ -69,6 +69,7 @@ export default function InputArea() {
   // Slash command state
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
   const [slashActiveIndex, setSlashActiveIndex] = useState(0)
+  const [slashToken, setSlashToken] = useState('')
   const [slashArgs, setSlashArgs] = useState('')
   const [filteredCommands, setFilteredCommands] = useState<SlashCommand[]>([])
   const commandCacheRef = useRef<{ tabId: string; commands: SlashCommand[] } | null>(null)
@@ -101,6 +102,7 @@ export default function InputArea() {
     }
     const filtered = filterCommands(token, commandCacheRef.current.commands)
     setFilteredCommands(filtered)
+    setSlashToken(token)
     setSlashArgs(args)
     setSlashActiveIndex(0)
     setSlashMenuOpen(true)
@@ -147,6 +149,11 @@ export default function InputArea() {
     setValue('')
     setAttachedFiles([])
     closeSlashMenu()
+    await sendDirect(msg)
+  }
+
+  async function sendDirect(msg: string) {
+    if (!tab) return
     if (thinking) {
       // Steering: deliver between tool calls without waiting for agent to finish
       try {
@@ -166,6 +173,18 @@ export default function InputArea() {
     }
   }
 
+  /** Argument choices for the command currently being typed (e.g. /workflow …). */
+  const activeCommand =
+    slashMenuOpen && slashArgs
+      ? commandCacheRef.current?.commands.find((c) => c.name === slashToken)
+      : undefined
+
+  function handleSelectArg(cmd: SlashCommand, choice: string) {
+    setValue('')
+    closeSlashMenu()
+    void sendDirect(`/${cmd.name} ${choice}`)
+  }
+
   function handleChange(newValue: string) {
     setValue(newValue)
     if (newValue.startsWith('/')) {
@@ -181,6 +200,18 @@ export default function InputArea() {
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (slashMenuOpen) {
+      if (e.key === 'Tab' && slashArgs && activeCommand?.argChoices?.length) {
+        // Complete the first matching argument choice (e.g. workflow ids)
+        e.preventDefault()
+        const match = activeCommand.argChoices.find((c) =>
+          c.toLowerCase().startsWith(slashArgs.toLowerCase())
+        )
+        if (match) {
+          setValue(`/${activeCommand.name} ${match}`)
+          void openSlashMenu(activeCommand.name, match)
+        }
+        return
+      }
       if (e.key === 'ArrowDown') {
         e.preventDefault()
         setSlashActiveIndex((i) => Math.min(i + 1, filteredCommands.length - 1))
@@ -288,6 +319,8 @@ export default function InputArea() {
               onSelect={handleSlashSelect}
               onDismiss={closeSlashMenu}
               args={slashArgs || undefined}
+              activeCommand={activeCommand}
+              onSelectArg={handleSelectArg}
             />
           )}
           <textarea

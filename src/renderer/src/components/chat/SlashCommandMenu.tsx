@@ -9,6 +9,10 @@ interface Props {
   onDismiss(): void
   /** Arguments already typed after the command (e.g. "foo bar" for "/cmd foo bar") */
   args?: string
+  /** The command whose arguments are being typed (token match), if resolved */
+  activeCommand?: SlashCommand
+  /** Complete an argument choice for the active command and send it */
+  onSelectArg?(command: SlashCommand, choice: string): void
 }
 
 const SOURCE_COLORS: Record<SlashCommand['source'], string> = {
@@ -18,7 +22,14 @@ const SOURCE_COLORS: Record<SlashCommand['source'], string> = {
   extension: 'text-purple-500',
 }
 
-export default function SlashCommandMenu({ commands, activeIndex, onSelect, args }: Props) {
+export default function SlashCommandMenu({
+  commands,
+  activeIndex,
+  onSelect,
+  args,
+  activeCommand,
+  onSelectArg,
+}: Props) {
   const itemRefs = useRef<Array<HTMLDivElement | null>>([])
 
   // Keep the keyboard-highlighted item inside the visible scroll region —
@@ -35,6 +46,13 @@ export default function SlashCommandMenu({ commands, activeIndex, onSelect, args
       </div>
     )
   }
+
+  // Known argument choices for the resolved command (e.g. workflow ids),
+  // filtered by what the user already typed.
+  const argChoices =
+    args && activeCommand?.argChoices?.length
+      ? activeCommand.argChoices.filter((c) => c.toLowerCase().startsWith(args.toLowerCase()))
+      : []
 
   return (
     <div
@@ -69,9 +87,33 @@ export default function SlashCommandMenu({ commands, activeIndex, onSelect, args
           )}
         </div>
       ))}
+
+      {argChoices.length > 0 && (
+        <div className="mt-1 border-t border-zinc-800/60 pt-1" data-testid="slash-arg-choices">
+          {argChoices.map((choice) => (
+            <div
+              key={choice}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                onSelectArg?.(activeCommand!, choice)
+              }}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1 text-xs hover:bg-zinc-800/50"
+            >
+              <span className="text-[10px] text-amber-500/80">↳</span>
+              <span className="font-mono text-zinc-300">{choice}</span>
+              <span className="ml-auto text-[10px] text-zinc-600">click to run</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="border-t border-zinc-800/60 px-3 py-1 text-[10px] text-zinc-600">
         {commands.length} commands
-        {args ? ' · Enter sends with arguments' : ' · ↑↓ navigate · ↵ select'}
+        {args
+          ? argChoices.length > 0
+            ? ` · ${argChoices.length} ${activeCommand?.argHint ?? 'choices'} · Enter sends as-is`
+            : ` · Enter sends${activeCommand?.argHint ? ` (${activeCommand.argHint})` : ' with arguments'}`
+          : ' · ↑↓ navigate · ↵ select'}
       </div>
     </div>
   )

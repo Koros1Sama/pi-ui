@@ -23,6 +23,18 @@ export interface ExtensionDialog {
   options?: string[]
 }
 
+/** Interactive session-tree picker state (fork points from /tree). */
+export interface TreePickerState {
+  sessionId: string
+  nodes: import('@shared/types').TreePickerNode[]
+}
+
+/** A transient extension notification (toast). */
+export interface ToastState {
+  message: string
+  level: string
+}
+
 export interface UiState {
   settingsOpen: boolean
   newSessionOpen: boolean
@@ -32,6 +44,8 @@ export interface UiState {
   updateError: string | null
   sessionViewMode: SessionViewMode
   extensionDialog: ExtensionDialog | null
+  treePicker: TreePickerState | null
+  toast: ToastState | null
 }
 
 export interface UiActions {
@@ -47,6 +61,8 @@ export interface UiActions {
   ): void
   setSessionViewMode(mode: SessionViewMode): void
   setExtensionDialog(dialog: ExtensionDialog | null): void
+  setTreePicker(picker: TreePickerState | null): void
+  setToast(toast: ToastState | null): void
 }
 
 export const initialUiState: UiState = {
@@ -58,6 +74,8 @@ export const initialUiState: UiState = {
   updateError: null,
   sessionViewMode: 'grouped',
   extensionDialog: null,
+  treePicker: null,
+  toast: null,
 }
 
 export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): UiActions => ({
@@ -91,5 +109,13 @@ export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): 
   setExtensionDialog: (dialog) =>
     set((s) => {
       s.ui.extensionDialog = dialog
+    }),
+  setTreePicker: (picker) =>
+    set((s) => {
+      s.ui.treePicker = picker
+    }),
+  setToast: (toast) =>
+    set((s) => {
+      s.ui.toast = toast
     }),
 })
