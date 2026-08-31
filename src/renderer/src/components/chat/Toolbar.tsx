@@ -42,6 +42,8 @@ export default function Toolbar() {
     try {
       await window.pi.session.setThinking(tab.sessionId, level)
       patchTab(tab.id, { thinkingLevel: level })
+      // Persist as the default so new sessions start at the chosen effort.
+      await window.pi.config.setDefaults({ defaultThinkingLevel: level })
     } catch (err) {
       console.error(err)
     }

@@ -5,6 +5,7 @@ import Toolbar from './Toolbar'
 import MessageList from './MessageList'
 import InputArea from './InputArea'
 import ResumeBar from './ResumeBar'
+import ExtensionWidgets from './ExtensionWidgets'
 
 function EmptyState() {
   const openNewSession = useStore((s) => s.openNewSession)
@@ -116,6 +117,7 @@ export default function ChatPane() {
       {/* Keyed per tab: draft text, slash-menu state and scroll position
           must not leak across sessions sharing one component instance. */}
       <MessageList key={tab.id} />
+      <ExtensionWidgets key={`widgets-${tab.id}`} />
       <InputArea key={tab.id} />
     </div>
   )

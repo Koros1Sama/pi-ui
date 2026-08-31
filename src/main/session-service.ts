@@ -412,6 +412,25 @@ export class SessionService {
       })
       return
     }
+    if (method === 'setWidget') {
+      // Extension info panels (contacts, model info, …) — lines, or clear.
+      entry.onEvent('pi:widget', {
+        sessionId,
+        widgetKey: str(req['widgetKey']) ?? '',
+        lines: Array.isArray(req['widgetLines']) ? (req['widgetLines'] as string[]) : null,
+        placement: str(req['widgetPlacement']) ?? 'aboveEditor',
+      })
+      return
+    }
+    if (method === 'setStatus') {
+      // Footer status entries — text, or clear.
+      entry.onEvent('pi:status', {
+        sessionId,
+        statusKey: str(req['statusKey']) ?? '',
+        text: str(req['statusText']) ?? null,
+      })
+      return
+    }
     if (!DIALOG_UI_METHODS.has(method)) return
     entry.onEvent('pi:ui-request', {
       sessionId,

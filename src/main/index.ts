@@ -74,18 +74,33 @@ async function createWindow(): Promise<void> {
   })
 }
 
-app.whenReady().then(() => {
-  // Set Dock icon (macOS only) — needed when running unpackaged
-  if (process.platform === 'darwin' && app.dock) {
-    const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.icns'))
-    app.dock.setIcon(icon)
-  }
-  createWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+// One pi-ui at a time: a second launch focuses the existing window instead
+// of opening another instance — overlapping zombie instances looked like the
+// UI "splitting" into 2/3/4 copies when switching sessions/tabs.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
   })
-})
+
+  app.whenReady().then(() => {
+    // Set Dock icon (macOS only) — needed when running unpackaged
+    if (process.platform === 'darwin' && app.dock) {
+      const icon = nativeImage.createFromPath(join(__dirname, '../../build/icon.icns'))
+      app.dock.setIcon(icon)
+    }
+    createWindow()
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
+  })
+}
 
 app.on('before-quit', () => {
   sessions.disposeAll()

@@ -72,11 +72,19 @@ export default function App() {
     const offNotify = window.pi.on('pi:notify', (payload) => {
       setToast({ message: payload.message, level: payload.level })
     })
+    const offWidget = window.pi.on('pi:widget', ({ sessionId, widgetKey, lines }) => {
+      useStore.getState().setExtensionWidget(sessionId, widgetKey, lines)
+    })
+    const offStatus = window.pi.on('pi:status', ({ sessionId, statusKey, text }) => {
+      useStore.getState().setExtensionStatus(sessionId, statusKey, text)
+    })
     return () => {
       offReady()
       offUi()
       offTree()
       offNotify()
+      offWidget()
+      offStatus()
     }
   }, [loadSessions, pushExtensionDialog, setTreePicker, setToast])
 

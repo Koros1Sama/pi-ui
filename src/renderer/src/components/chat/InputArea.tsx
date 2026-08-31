@@ -61,7 +61,7 @@ export default function InputArea() {
   const tab = useActiveTab()
   const addUserMessage = useStore((s) => s.addUserMessage)
   const setTabStatus = useStore((s) => s.setTabStatus)
-  const replaceTab = useStore((s) => s.replaceTab)
+  const patchTab = useStore((s) => s.patchTab)
   const homedir = useStore((s) => s.config.homedir)
   const [value, setValue] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
@@ -265,8 +265,10 @@ export default function InputArea() {
     if (!tab) return
     try {
       const res = await window.pi.session.cycleThinking(tab.sessionId)
-      replaceTab(tab.id, { ...tab, thinkingLevel: res.level })
+      patchTab(tab.id, { thinkingLevel: res.level })
       useStore.getState().setToast({ message: `🧠 thinking: ${res.level}`, level: 'info' })
+      // Persist as the default so new sessions start at the chosen effort.
+      await window.pi.config.setDefaults({ defaultThinkingLevel: res.level })
     } catch (err) {
       console.error('[cycleThinking]', err)
     }

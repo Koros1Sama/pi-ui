@@ -748,6 +748,53 @@ describe('SessionService (RPC engine)', () => {
         level: 'error',
       })
     })
+
+    it('surfaces setWidget as pi:widget (and null clears)', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('ui-request', {
+        type: 'extension_ui_request',
+        id: 'w1',
+        method: 'setWidget',
+        widgetKey: 'contacts',
+        widgetLines: ['Alice: 123', 'Bob: 456'],
+      })
+      expect(onEvent).toHaveBeenCalledWith('pi:widget', {
+        sessionId,
+        widgetKey: 'contacts',
+        lines: ['Alice: 123', 'Bob: 456'],
+        placement: 'aboveEditor',
+      })
+      lastRpc().emitCustom('ui-request', {
+        type: 'extension_ui_request',
+        id: 'w2',
+        method: 'setWidget',
+        widgetKey: 'contacts',
+      })
+      expect(onEvent).toHaveBeenLastCalledWith('pi:widget', {
+        sessionId,
+        widgetKey: 'contacts',
+        lines: null,
+        placement: 'aboveEditor',
+      })
+    })
+
+    it('surfaces setStatus as pi:status', async () => {
+      const sessionId = await createSession()
+      onEvent.mockClear()
+      lastRpc().emitCustom('ui-request', {
+        type: 'extension_ui_request',
+        id: 's1',
+        method: 'setStatus',
+        statusKey: 'my-ext',
+        statusText: 'Turn 3 running…',
+      })
+      expect(onEvent).toHaveBeenCalledWith('pi:status', {
+        sessionId,
+        statusKey: 'my-ext',
+        text: 'Turn 3 running…',
+      })
+    })
   })
 
   describe('model + thinking cycling (shortcuts)', () => {

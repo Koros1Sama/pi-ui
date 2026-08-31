@@ -35,6 +35,12 @@ export interface ToastState {
   level: string
 }
 
+/** Extension widgets + statuses, keyed by sessionId (ctx.ui.setWidget/setStatus). */
+export interface ExtensionWidgetsState {
+  widgets: Record<string, Record<string, string[]>>
+  statuses: Record<string, Record<string, string>>
+}
+
 export interface UiState {
   settingsOpen: boolean
   newSessionOpen: boolean
@@ -47,6 +53,7 @@ export interface UiState {
   extensionDialogs: ExtensionDialog[]
   treePicker: TreePickerState | null
   toast: ToastState | null
+  extensionWidgets: ExtensionWidgetsState
 }
 
 export interface UiActions {
@@ -65,6 +72,8 @@ export interface UiActions {
   shiftExtensionDialog(): void
   setTreePicker(picker: TreePickerState | null): void
   setToast(toast: ToastState | null): void
+  setExtensionWidget(sessionId: string, key: string, lines: string[] | null): void
+  setExtensionStatus(sessionId: string, key: string, text: string | null): void
 }
 
 export const initialUiState: UiState = {
@@ -78,6 +87,7 @@ export const initialUiState: UiState = {
   extensionDialogs: [],
   treePicker: null,
   toast: null,
+  extensionWidgets: { widgets: {}, statuses: {} },
 }
 
 export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): UiActions => ({
@@ -123,5 +133,33 @@ export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): 
   setToast: (toast) =>
     set((s) => {
       s.ui.toast = toast
+    }),
+  setExtensionWidget: (sessionId, key, lines) =>
+    set((s) => {
+      const bySession = s.ui.extensionWidgets.widgets[sessionId] ?? {}
+      if (lines === null) {
+        delete bySession[key]
+      } else {
+        bySession[key] = lines
+      }
+      if (Object.keys(bySession).length === 0) {
+        delete s.ui.extensionWidgets.widgets[sessionId]
+      } else {
+        s.ui.extensionWidgets.widgets[sessionId] = bySession
+      }
+    }),
+  setExtensionStatus: (sessionId, key, text) =>
+    set((s) => {
+      const bySession = s.ui.extensionWidgets.statuses[sessionId] ?? {}
+      if (text === null) {
+        delete bySession[key]
+      } else {
+        bySession[key] = text
+      }
+      if (Object.keys(bySession).length === 0) {
+        delete s.ui.extensionWidgets.statuses[sessionId]
+      } else {
+        s.ui.extensionWidgets.statuses[sessionId] = bySession
+      }
     }),
 })

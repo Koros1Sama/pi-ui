@@ -137,6 +137,15 @@ export interface PiEventPayloads {
   }
   /** Fire-and-forget extension notification, surfaced as a toast. */
   'pi:notify': { sessionId: string; message: string; level: string }
+  /** Extension widget lines (contacts/model info etc.), null clears. */
+  'pi:widget': {
+    sessionId: string
+    widgetKey: string
+    lines: string[] | null
+    placement: string
+  }
+  /** Extension footer status entry, null clears. */
+  'pi:status': { sessionId: string; statusKey: string; text: string | null }
   /** Interactive session-tree picker (fork points from /tree). */
   'pi:tree-picker': { sessionId: string; nodes: TreePickerNode[] }
   'update:checking': Record<string, never>
