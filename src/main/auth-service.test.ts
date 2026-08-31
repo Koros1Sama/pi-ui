@@ -60,6 +60,47 @@ describe('AuthService', () => {
 
       expect(anthropic).toEqual({ name: 'anthropic', authType: 'apikey', configured: false })
     })
+
+    it('lists zai and kimi-coding as api-key providers', async () => {
+      mockGetAll.mockReturnValue({})
+
+      const statuses = await service.getProviderStatuses()
+      const names = statuses.filter((s) => s.authType === 'apikey').map((s) => s.name)
+
+      expect(names).toContain('zai')
+      expect(names).toContain('kimi-coding')
+    })
+
+    it('marks zai as configured when auth.json holds its key', async () => {
+      mockGetAll.mockReturnValue({ zai: { type: 'api_key', key: 'zk' } })
+
+      const statuses = await service.getProviderStatuses()
+      const zai = statuses.find((s) => s.name === 'zai')
+
+      expect(zai).toEqual({ name: 'zai', authType: 'apikey', configured: true })
+    })
+
+    it('discovers extra stored api_key credentials outside the built-in lists', async () => {
+      mockGetAll.mockReturnValue({
+        minimax: { type: 'api_key', key: 'mm' },
+        'my-custom-provider': { type: 'api_key', key: 'x' },
+      })
+
+      const statuses = await service.getProviderStatuses()
+      const minimax = statuses.find((s) => s.name === 'minimax')
+      const custom = statuses.find((s) => s.name === 'my-custom-provider')
+
+      expect(minimax).toEqual({ name: 'minimax', authType: 'apikey', configured: true })
+      expect(custom).toEqual({ name: 'my-custom-provider', authType: 'apikey', configured: true })
+    })
+
+    it('does not duplicate oauth credentials as api-key extras', async () => {
+      mockGetAll.mockReturnValue({ 'github-copilot': { type: 'oauth', access: 't' } })
+
+      const statuses = await service.getProviderStatuses()
+
+      expect(statuses.filter((s) => s.name === 'github-copilot')).toHaveLength(1)
+    })
   })
 
   describe('setApiKey', () => {

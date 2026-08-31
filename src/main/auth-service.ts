@@ -20,6 +20,8 @@ const API_KEY_PROVIDERS: string[] = [
   'openrouter',
   'cerebras',
   'huggingface',
+  'zai',
+  'kimi-coding',
 ]
 
 export class AuthService {
@@ -44,7 +46,15 @@ export class AuthService {
       configured: name in all && (all[name] as { type: string }).type === 'api_key',
     }))
 
-    return [...oauth, ...apikey]
+    // Discover any other api-key credentials already stored in auth.json
+    // (custom providers, newly supported providers) and surface them as
+    // configured rows so their models are not hidden by the UI filter.
+    const known = new Set([...OAUTH_PROVIDERS, ...API_KEY_PROVIDERS])
+    const extra: ProviderStatus[] = Object.keys(all)
+      .filter((name) => !known.has(name) && (all[name] as { type: string }).type === 'api_key')
+      .map((name) => ({ name, authType: 'apikey' as const, configured: true }))
+
+    return [...oauth, ...apikey, ...extra]
   }
 
   async setApiKey(provider: string, key: string): Promise<void> {
