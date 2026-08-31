@@ -1,6 +1,7 @@
 // src/main/index.ts
 import { app, BrowserWindow, nativeImage } from 'electron'
 import { join } from 'path'
+import { tmpdir } from 'os'
 import { is } from '@electron-toolkit/utils'
 import { AuthService } from './auth-service'
 import { ModelService } from './model-service'
@@ -74,12 +75,19 @@ async function createWindow(): Promise<void> {
   })
 }
 
-// One pi-ui at a time: a second launch focuses the existing window instead
-// of opening another instance — overlapping zombie instances looked like the
-// UI "splitting" into 2/3/4 copies when switching sessions/tabs.
-if (!app.requestSingleInstanceLock()) {
-  app.quit()
-} else {
+// E2E isolation: test instances get a unique temp userData dir and skip the
+// single-instance lock — otherwise a concurrently running dev/user instance
+// (which holds the lock) makes every test instance quit at launch, and
+// parallel test files would fight over the same lock.
+const isE2E = Boolean(process.env['PI_E2E'])
+let shouldStart = false
+if (isE2E) {
+  app.setPath('userData', join(tmpdir(), `piui-e2e-${process.pid}`))
+  shouldStart = true
+} else if (app.requestSingleInstanceLock()) {
+  // One pi-ui at a time: a second launch focuses the existing window instead
+  // of opening another instance — overlapping zombie instances looked like the
+  // UI "splitting" into 2/3/4 copies when switching sessions/tabs.
   app.on('second-instance', () => {
     const win = BrowserWindow.getAllWindows()[0]
     if (win) {
@@ -87,7 +95,12 @@ if (!app.requestSingleInstanceLock()) {
       win.focus()
     }
   })
+  shouldStart = true
+} else {
+  app.quit()
+}
 
+if (shouldStart) {
   app.whenReady().then(() => {
     // Set Dock icon (macOS only) — needed when running unpackaged
     if (process.platform === 'darwin' && app.dock) {
