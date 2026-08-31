@@ -41,11 +41,13 @@ pnpm install
 ```
 
 **Run in development:**
+
 ```bash
 pnpm dev
 ```
 
 **Build distributable:**
+
 ```bash
 # macOS (universal binary)
 pnpm dist
@@ -69,6 +71,7 @@ pnpm dist:win
 Issues and PRs welcome. The codebase is documented in [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 Run checks before pushing:
+
 ```bash
 pnpm typecheck
 pnpm test:run

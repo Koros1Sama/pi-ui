@@ -53,7 +53,14 @@ test('diff pane replaces content when a new write/edit tool call completes', asy
     ({ sessionId }) => {
       const m = (window as any).__mockPi
       m.emitToolStart(sessionId, 'tool-write-2', 'write', { path: 'src/config.ts' })
-      m.emitToolEnd(sessionId, 'tool-write-2', 'write', '--- a/src/config.ts\n+++ b/src/config.ts\n@@ -1 +1 @@\n-old\n+new\n', false, 50)
+      m.emitToolEnd(
+        sessionId,
+        'tool-write-2',
+        'write',
+        '--- a/src/config.ts\n+++ b/src/config.ts\n@@ -1 +1 @@\n-old\n+new\n',
+        false,
+        50
+      )
     },
     { sessionId: sid }
   )
@@ -153,7 +160,14 @@ test('comments are cleared when a new diff replaces the current one', async ({ p
     ({ sessionId }) => {
       const m = (window as any).__mockPi
       m.emitToolStart(sessionId, 'tool-write-3', 'write', { path: 'src/new.ts' })
-      m.emitToolEnd(sessionId, 'tool-write-3', 'write', '--- a/src/new.ts\n+++ b/src/new.ts\n@@ -1 +1 @@\n-x\n+y\n', false, 30)
+      m.emitToolEnd(
+        sessionId,
+        'tool-write-3',
+        'write',
+        '--- a/src/new.ts\n+++ b/src/new.ts\n@@ -1 +1 @@\n-x\n+y\n',
+        false,
+        30
+      )
     },
     { sessionId: sid }
   )

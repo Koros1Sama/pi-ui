@@ -7,10 +7,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   workers: 1,
   globalSetup: './e2e/helpers/global-setup.ts',
-  reporter: [
-    ['list'],
-    ['html', { open: 'never', outputFolder: 'playwright-report' }],
-  ],
+  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     trace: 'on-first-retry',
   },

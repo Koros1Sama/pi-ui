@@ -39,8 +39,11 @@ export { expect } from '@playwright/test'
 
 export async function emitToken(page: Page, sessionId: string, delta: string): Promise<void> {
   await page.evaluate(
-    ({ sessionId, delta }) => (window as Window & { __mockPi?: { emitToken: (s: string, d: string) => void } }).__mockPi?.emitToken(sessionId, delta),
-    { sessionId, delta },
+    ({ sessionId, delta }) =>
+      (
+        window as Window & { __mockPi?: { emitToken: (s: string, d: string) => void } }
+      ).__mockPi?.emitToken(sessionId, delta),
+    { sessionId, delta }
   )
 }
 
@@ -49,12 +52,12 @@ export async function emitToolStart(
   sessionId: string,
   toolCallId: string,
   toolName: string,
-  args: Record<string, unknown> = {},
+  args: Record<string, unknown> = {}
 ): Promise<void> {
   await page.evaluate(
     ({ sessionId, toolCallId, toolName, args }) =>
       (window as any).__mockPi?.emitToolStart(sessionId, toolCallId, toolName, args),
-    { sessionId, toolCallId, toolName, args },
+    { sessionId, toolCallId, toolName, args }
   )
 }
 
@@ -65,7 +68,7 @@ export async function emitToolEnd(
   toolName: string,
   result = '',
   isError = false,
-  durationMs = 120,
+  durationMs = 120
 ): Promise<void> {
   await page.evaluate(
     ({ sessionId, toolCallId, toolName, result, isError, durationMs }) =>
@@ -75,30 +78,28 @@ export async function emitToolEnd(
         toolName,
         result,
         isError,
-        durationMs,
+        durationMs
       ),
-    { sessionId, toolCallId, toolName, result, isError, durationMs },
+    { sessionId, toolCallId, toolName, result, isError, durationMs }
   )
 }
 
 export async function emitTurnEnd(page: Page, sessionId: string): Promise<void> {
-  await page.evaluate(
-    ({ sessionId }) => (window as any).__mockPi?.emitTurnEnd(sessionId),
-    { sessionId },
-  )
+  await page.evaluate(({ sessionId }) => (window as any).__mockPi?.emitTurnEnd(sessionId), {
+    sessionId,
+  })
 }
 
 export async function emitIdle(page: Page, sessionId: string): Promise<void> {
-  await page.evaluate(
-    ({ sessionId }) => (window as any).__mockPi?.emitIdle(sessionId),
-    { sessionId },
-  )
+  await page.evaluate(({ sessionId }) => (window as any).__mockPi?.emitIdle(sessionId), {
+    sessionId,
+  })
 }
 
 export async function emitError(page: Page, sessionId: string, message: string): Promise<void> {
   await page.evaluate(
     ({ sessionId, message }) => (window as any).__mockPi?.emitError(sessionId, message),
-    { sessionId, message },
+    { sessionId, message }
   )
 }
 
@@ -138,7 +139,7 @@ export async function emitWriteToolCall(
   page: Page,
   sessionId: string,
   filePath = 'src/auth.ts',
-  result = SAMPLE_DIFF,
+  result = SAMPLE_DIFF
 ): Promise<void> {
   await emitToolStart(page, sessionId, 'tool-write-1', 'write', { path: filePath })
   await emitToolEnd(page, sessionId, 'tool-write-1', 'write', result)
@@ -149,7 +150,7 @@ export async function emitEditToolCall(
   page: Page,
   sessionId: string,
   filePath = 'src/auth.ts',
-  result = SAMPLE_DIFF,
+  result = SAMPLE_DIFF
 ): Promise<void> {
   await emitToolStart(page, sessionId, 'tool-edit-1', 'edit', { path: filePath })
   await emitToolEnd(page, sessionId, 'tool-edit-1', 'edit', result)
@@ -166,7 +167,9 @@ export async function emitUpdateAvailable(page: Page, version: string): Promise<
 }
 
 export async function emitUpdateNotAvailable(page: Page, version: string): Promise<void> {
-  await page.evaluate(({ v }) => (window as any).__mockPi?.emitUpdateNotAvailable(v), { v: version })
+  await page.evaluate(({ v }) => (window as any).__mockPi?.emitUpdateNotAvailable(v), {
+    v: version,
+  })
 }
 
 export async function emitUpdateProgress(page: Page, percent: number): Promise<void> {

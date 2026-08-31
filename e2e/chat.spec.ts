@@ -117,11 +117,16 @@ test('binary file attachment shows error chip', async ({ page }) => {
   // Simulate drop of a file with null bytes (binary)
   // We inject a fake drop event with binary-like content via page.evaluate
   await page.evaluate(() => {
-    const input = document.querySelector('[data-testid="chat-input"]')!.closest('div[class]')!
-      .parentElement!
-    const file = new File([new Uint8Array([72, 101, 108, 108, 111, 0, 87, 111, 114, 108, 100])], 'binary.bin', {
-      type: 'application/octet-stream',
-    })
+    const input = document
+      .querySelector('[data-testid="chat-input"]')!
+      .closest('div[class]')!.parentElement!
+    const file = new File(
+      [new Uint8Array([72, 101, 108, 108, 111, 0, 87, 111, 114, 108, 100])],
+      'binary.bin',
+      {
+        type: 'application/octet-stream',
+      }
+    )
     const dt = new DataTransfer()
     dt.items.add(file)
     const dropEvent = new DragEvent('drop', { bubbles: true, dataTransfer: dt })
@@ -136,8 +141,9 @@ test('binary file attachment shows error chip', async ({ page }) => {
 test('oversized file attachment shows error chip', async ({ page }) => {
   // Simulate drop of a file > 500KB
   await page.evaluate(() => {
-    const input = document.querySelector('[data-testid="chat-input"]')!.closest('div[class]')!
-      .parentElement!
+    const input = document
+      .querySelector('[data-testid="chat-input"]')!
+      .closest('div[class]')!.parentElement!
     const big = new File([new Uint8Array(600 * 1024).fill(65)], 'huge.txt', { type: 'text/plain' })
     const dt = new DataTransfer()
     dt.items.add(big)
@@ -151,8 +157,9 @@ test('oversized file attachment shows error chip', async ({ page }) => {
 
 test('drag-and-drop attaches a text file', async ({ page }) => {
   await page.evaluate(() => {
-    const input = document.querySelector('[data-testid="chat-input"]')!.closest('div[class]')!
-      .parentElement!
+    const input = document
+      .querySelector('[data-testid="chat-input"]')!
+      .closest('div[class]')!.parentElement!
     const file = new File(['const x = 1\n'], 'dropped.ts', { type: 'text/plain' })
     const dt = new DataTransfer()
     dt.items.add(file)

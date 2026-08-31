@@ -8,8 +8,7 @@ export const sidebar = {
   // + button moved to tab bar in Session C
   newSessionBtn: (page: Page) => page.locator('[data-testid="tab-bar-new-btn"]').first(),
   modelList: (page: Page) => page.locator('[data-testid="model-list"]'),
-  modelItem: (page: Page, modelId: string) =>
-    page.locator(`[data-testid="model-item-${modelId}"]`),
+  modelItem: (page: Page, modelId: string) => page.locator(`[data-testid="model-item-${modelId}"]`),
   providerList: (page: Page) => page.locator('[data-testid="provider-list"]'),
   providerItem: (page: Page, name: string) =>
     page.locator(`[data-testid="provider-item-${name.toLowerCase()}"]`),
@@ -19,8 +18,7 @@ export const sidebar = {
 export const chat = {
   emptyState: (page: Page) => page.locator('[data-testid="chat-empty-state"]'),
   messageList: (page: Page) => page.locator('[data-testid="message-list"]'),
-  userMessage: (page: Page, index = 0) =>
-    page.locator('[data-testid="user-message"]').nth(index),
+  userMessage: (page: Page, index = 0) => page.locator('[data-testid="user-message"]').nth(index),
   assistantMessage: (page: Page, index = 0) =>
     page.locator('[data-testid="assistant-message"]').nth(index),
   toolCallEntry: (page: Page, index = 0) =>
@@ -52,7 +50,6 @@ export const settingsModal = {
   systemPromptInput: (page: Page) => page.locator('[data-testid="system-prompt-input"]'),
 }
 
-
 export const sessionHistory = {
   list: (page: Page) => page.locator('[data-testid="session-list"]'),
   search: (page: Page) => page.locator('[data-testid="session-search"]'),
@@ -73,7 +70,8 @@ export const diffPane = {
   closeBtn: (page: Page) => page.locator('[data-testid="diff-pane-close-btn"]'),
   diffView: (page: Page) => page.locator('[data-testid="diff-view"]'),
   diffLine: (page: Page, index: number) => page.locator(`[data-testid="diff-line-${index}"]`),
-  gutterBtn: (page: Page, index: number) => page.locator(`[data-testid="diff-gutter-btn-${index}"]`),
+  gutterBtn: (page: Page, index: number) =>
+    page.locator(`[data-testid="diff-gutter-btn-${index}"]`),
   comment: (page: Page) => page.locator('[data-testid="diff-comment"]'),
   sendReviewBtn: (page: Page) => page.locator('[data-testid="send-review-btn"]'),
   toggleBtn: (page: Page) => page.locator('[data-testid="diff-pane-toggle-btn"]'),
