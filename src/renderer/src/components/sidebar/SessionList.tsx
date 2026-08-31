@@ -6,6 +6,7 @@ import { formatTimestamp } from './SessionEntry'
 import CwdGroup from './CwdGroup'
 import SessionEntry from './SessionEntry'
 import SessionSearch from './SessionSearch'
+import ContentSearchPanel from './ContentSearchPanel'
 import type { SessionSummary } from '@shared/types'
 
 function cwdBasename(cwd: string): string {
@@ -29,6 +30,7 @@ export default function SessionList() {
 
   const [query, setQuery] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [contentMode, setContentMode] = useState(false)
 
   // The session the ACTIVE top tab points at: live sessions are matched via
   // liveSessionId (the tab id), past-session tabs via the sdk id.
@@ -221,61 +223,72 @@ export default function SessionList() {
         </button>
       </div>
 
-      <SessionSearch value={query} onChange={setQuery} />
+      <SessionSearch
+        value={query}
+        onChange={setQuery}
+        contentMode={contentMode}
+        onToggleContentMode={() => setContentMode((v) => !v)}
+      />
 
-      {sessions.length > 0 && (
-        <div data-testid="session-list" className="flex-1 space-y-1 overflow-y-auto px-2 py-1">
-          {viewMode === 'grouped'
-            ? filteredGroups.map((g) => (
-                <CwdGroup
-                  key={g.slug}
-                  cwdSlug={g.slug}
-                  cwd={g.cwd}
-                  sessions={g.sessions}
-                  expanded={isExpanded(g.slug)}
-                  selectedLiveId={selectedLiveId}
-                  selectedSdkId={selectedSdkId}
-                  onToggle={() => toggleCwdExpanded(g.slug)}
-                  onSelectSession={handleSelectSession}
-                  onRenameSession={handleRename}
-                  onTogglePinSession={handleTogglePin}
-                  onDeleteSession={handleDelete}
-                />
-              ))
-            : filteredFlat.map((session) => (
-                <div key={session.id} className="flex items-center gap-1">
-                  <div className="min-w-0 flex-1">
-                    <SessionEntry
-                      session={session}
-                      isSelected={isSelected(session)}
-                      onClick={() => handleSelectSession(session)}
-                      onRename={(name) => handleRename(session, name)}
-                      onTogglePin={() => handleTogglePin(session)}
-                      onDelete={() => handleDelete(session)}
+      {contentMode ? (
+        <ContentSearchPanel query={query} />
+      ) : (
+        <>
+          {sessions.length > 0 && (
+            <div data-testid="session-list" className="flex-1 space-y-1 overflow-y-auto px-2 py-1">
+              {viewMode === 'grouped'
+                ? filteredGroups.map((g) => (
+                    <CwdGroup
+                      key={g.slug}
+                      cwdSlug={g.slug}
+                      cwd={g.cwd}
+                      sessions={g.sessions}
+                      expanded={isExpanded(g.slug)}
+                      selectedLiveId={selectedLiveId}
+                      selectedSdkId={selectedSdkId}
+                      onToggle={() => toggleCwdExpanded(g.slug)}
+                      onSelectSession={handleSelectSession}
+                      onRenameSession={handleRename}
+                      onTogglePinSession={handleTogglePin}
+                      onDeleteSession={handleDelete}
                     />
-                  </div>
-                  <span
-                    className="shrink-0 max-w-[70px] truncate text-[10px] text-zinc-700"
-                    title={session.cwd}
-                  >
-                    {cwdBasename(session.cwd)}
-                  </span>
-                </div>
-              ))}
-          {noMatches && (
-            <p className="py-4 text-center text-xs text-zinc-700">
-              No sessions match &ldquo;{query}&rdquo;
-            </p>
+                  ))
+                : filteredFlat.map((session) => (
+                    <div key={session.id} className="flex items-center gap-1">
+                      <div className="min-w-0 flex-1">
+                        <SessionEntry
+                          session={session}
+                          isSelected={isSelected(session)}
+                          onClick={() => handleSelectSession(session)}
+                          onRename={(name) => handleRename(session, name)}
+                          onTogglePin={() => handleTogglePin(session)}
+                          onDelete={() => handleDelete(session)}
+                        />
+                      </div>
+                      <span
+                        className="shrink-0 max-w-[70px] truncate text-[10px] text-zinc-700"
+                        title={session.cwd}
+                      >
+                        {cwdBasename(session.cwd)}
+                      </span>
+                    </div>
+                  ))}
+              {noMatches && (
+                <p className="py-4 text-center text-xs text-zinc-700">
+                  No sessions match &ldquo;{query}&rdquo;
+                </p>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {sessions.length === 0 && (
-        <div className="px-4 py-6 text-center text-xs text-zinc-700">
-          No sessions yet.
-          <br />
-          Start one with +
-        </div>
+          {sessions.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-zinc-700">
+              No sessions yet.
+              <br />
+              Start one with +
+            </div>
+          )}
+        </>
       )}
     </div>
   )

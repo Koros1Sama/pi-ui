@@ -5,6 +5,7 @@ import type { ModelService } from './model-service'
 import type { SettingsService } from './settings-service'
 import type { PreferencesService } from './preferences-service'
 import type { SessionService } from './session-service'
+import { ContentSearchService } from './content-search-service'
 import { homedir } from 'os'
 import { SessionStore } from './session-store'
 import type { PiEventName, PiEventPayloads } from '@shared/types'
@@ -21,7 +22,8 @@ export class IpcBridge {
     private readonly settings: SettingsService,
     private readonly prefs: PreferencesService,
     private readonly sessions: SessionService,
-    private readonly store: SessionStore
+    private readonly store: SessionStore,
+    private readonly contentSearch: ContentSearchService = new ContentSearchService()
   ) {}
 
   setUpdater(updater: UpdateService | null): void {
@@ -34,6 +36,7 @@ export class IpcBridge {
     this.registerSession()
     this.registerDialog()
     this.registerShell()
+    this.registerSearch()
     this.registerHistory()
     this.registerUpdate()
   }
@@ -262,6 +265,12 @@ export class IpcBridge {
     this.handle('shell:openPath', (_e, { path }: { path: string }) => {
       shell.openPath(path)
     })
+  }
+
+  private registerSearch(): void {
+    this.handle('search:content', (_e, req: { cwd: string; query: string; maxMatches?: number }) =>
+      this.contentSearch.search(req)
+    )
   }
 
   private registerHistory(): void {
