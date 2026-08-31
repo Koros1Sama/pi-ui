@@ -31,15 +31,17 @@ function StatusDot({ status, mode }: { status: Tab['status']; mode: Tab['mode'] 
 }
 
 export default function TabItem({ tab, isActive, onActivate, onClose }: Props) {
-  const label = tab.cwd ? (tab.cwd.split('/').filter(Boolean).pop() ?? tab.cwd) : 'New session'
+  // Windows paths use backslashes — split on both separators, show the tail.
+  const label = tab.cwd ? (tab.cwd.split(/[\\/]/).filter(Boolean).pop() ?? tab.cwd) : 'New session'
 
   return (
     <div
       data-testid={`tab-${tab.id}`}
       data-tab-item="true"
+      title={tab.cwd ?? 'New session'}
       onClick={onActivate}
       className={cn(
-        'group flex max-w-[160px] cursor-pointer items-center gap-1.5 border-r border-[var(--pi-border-subtle)] px-3 py-2 text-xs transition-colors',
+        'group flex max-w-[220px] cursor-pointer items-center gap-1.5 border-r border-[var(--pi-border-subtle)] px-3 py-2 text-xs transition-colors',
         isActive
           ? 'bg-[var(--pi-bg)] text-zinc-200'
           : 'bg-[var(--pi-sidebar-bg)] text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300'

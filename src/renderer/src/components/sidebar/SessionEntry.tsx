@@ -57,6 +57,7 @@ export default function SessionEntry({
     <>
       <div
         data-testid={`session-entry-${session.id}`}
+        title={`${displayName} — ${session.cwd}`}
         className={cn(
           'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1 transition-colors',
           isSelected
