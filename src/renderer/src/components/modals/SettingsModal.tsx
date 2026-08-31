@@ -309,8 +309,27 @@ export default function SettingsModal() {
         </div>
 
         <UpdateSection />
+        <AboutSection />
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AboutSection() {
+  const appName = window.__APP_NAME__ ?? 'Koros Pi UI'
+  const appVersion = window.__APP_VERSION__ ?? 'dev'
+
+  return (
+    <div className="border-t border-zinc-900 pt-4">
+      <p className="mb-3 text-[10px] uppercase tracking-widest text-zinc-500">About</p>
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-zinc-300">{appName}</span>
+        <span className="text-xs text-zinc-600">v{appVersion}</span>
+      </div>
+      <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-600">
+        MIT License — by Koros Sama. Based on pi-ui by Marc Baqué.
+      </p>
+    </div>
   )
 }
 

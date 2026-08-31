@@ -1,7 +1,7 @@
 {
-  "name": "pi-ui",
+  "name": "koros-pi-ui",
   "version": "0.3.1",
-  "description": "Desktop UI for the pi coding agent",
+  "description": "Koros Pi UI — desktop UI for the pi coding agent",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
@@ -101,8 +101,8 @@
   },
   "packageManager": "pnpm@10.29.1",
   "build": {
-    "appId": "io.marcbaque.pi-ui",
-    "productName": "pi-ui",
+    "appId": "com.koros1sama.piui",
+    "productName": "Koros Pi UI",
     "mac": {
       "target": [
         {
@@ -148,12 +148,14 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "marcbaque",
+      "owner": "Koros1Sama",
       "repo": "pi-ui"
     }
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/marcbaque/pi-ui.git"
-  }
+  },
+  "author": "Koros Sama",
+  "license": "MIT"
 }

@@ -36,5 +36,6 @@ declare global {
     pi: PiAPI
     __mockPi?: MockPiControl
     __APP_VERSION__?: string
+    __APP_NAME__?: string
   }
 }
