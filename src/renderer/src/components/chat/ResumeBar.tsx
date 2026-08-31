@@ -35,10 +35,13 @@ export default function ResumeBar({ tabId }: Props) {
         model: resolvedModel,
         provider: resolvedProvider,
         thinkingLevel: 'off',
-        status: 'idle',
+        status: 'booting',
         messages: tab.messages,
         currentStreamingContent: '',
         mode: 'active',
+        // Keep the link to the original session id so sidebar dedup and
+        // highlight still match after the tab goes live.
+        readonlySessionId: session.id,
         diffPaneOpen: false,
         currentDiff: null,
         diffComments: [],

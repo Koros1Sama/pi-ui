@@ -40,6 +40,22 @@ export default function NewSessionDialog() {
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
 
+  // Mounted at app boot — useState initializers captured the EMPTY config
+  // before config:get() resolved. Reset local state during render when the
+  // dialog opens (React's derived-reset pattern; avoids set-state-in-effect).
+  const [prevOpen, setPrevOpen] = useState(ui.newSessionOpen)
+  if (ui.newSessionOpen !== prevOpen) {
+    setPrevOpen(ui.newSessionOpen)
+    if (ui.newSessionOpen) {
+      setCwd(config.defaultWorkingDirectory ?? '~')
+      setModel(config.defaultModel ?? '')
+      setProvider(config.defaultProvider ?? '')
+      setThinking(config.defaultThinkingLevel)
+      setName('')
+      setError(null)
+    }
+  }
+
   // Fall back to config defaults if user hasn't made a selection yet
   const effectiveModel = model || config.defaultModel || ''
   const effectiveProvider = provider || config.defaultProvider || ''
@@ -68,7 +84,9 @@ export default function NewSessionDialog() {
         model: effectiveModel,
         provider: effectiveProvider,
         thinkingLevel: thinking,
-        status: 'idle',
+        // The RPC subprocess spawns with the session — it IS booting (~30-60s
+        // with extensions). pi:session-ready flips it to idle.
+        status: 'booting',
         messages: [],
         currentStreamingContent: '',
         mode: 'active',

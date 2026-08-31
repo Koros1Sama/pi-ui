@@ -11,18 +11,20 @@ type UiAnswer = { value?: string; confirmed?: boolean; cancelled?: boolean }
  * Renders blocking extension UI requests (select/confirm/input/editor)
  * forwarded from the pi subprocess over RPC, and answers them via
  * window.pi.session.uiRespond. Without an answer the extension would hang,
- * so every dismissal path responds with `cancelled`.
+ * so every dismissal path responds with `cancelled`. Requests are queued
+ * (FIFO) — a second request never silently replaces a pending one.
  */
 export default function ExtensionUIDialog() {
-  const dialog = useStore((s) => s.ui.extensionDialog)
-  const setExtensionDialog = useStore((s) => s.setExtensionDialog)
+  const dialog = useStore((s) => s.ui.extensionDialogs[0] ?? null)
+  const shiftExtensionDialog = useStore((s) => s.shiftExtensionDialog)
+  const queueLength = useStore((s) => s.ui.extensionDialogs.length)
 
   if (!dialog) return null
 
   const { sessionId, requestId } = dialog
 
   async function answer(response: UiAnswer): Promise<void> {
-    setExtensionDialog(null)
+    shiftExtensionDialog()
     try {
       await window.pi.session.uiRespond(sessionId, requestId, response)
     } catch (err) {
@@ -40,6 +42,11 @@ export default function ExtensionUIDialog() {
       <DialogContent className="max-w-md border-zinc-800 bg-zinc-900">
         {/* key=requestId remounts the body per request so text state resets */}
         <DialogBody key={dialog.requestId} dialog={dialog} answer={answer} />
+        {queueLength > 1 && (
+          <p className="px-1 text-[10px] text-zinc-600">
+            +{queueLength - 1} more request(s) queued
+          </p>
+        )}
       </DialogContent>
     </Dialog>
   )
@@ -52,7 +59,8 @@ function DialogBody({
   dialog: ExtensionDialog
   answer(response: UiAnswer): Promise<void>
 }) {
-  const [text, setText] = useState(dialog.prefill ?? dialog.placeholder ?? '')
+  // Only prefill seeds the value — the placeholder is a hint, not an answer.
+  const [text, setText] = useState(dialog.prefill ?? '')
 
   return (
     <>

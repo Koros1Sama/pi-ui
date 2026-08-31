@@ -155,14 +155,17 @@ export default function InputArea() {
 
   async function sendDirect(msg: string) {
     if (!tab) return
-    if (thinking) {
-      // Steering: deliver between tool calls without waiting for agent to finish
+    if (tab.status === 'thinking') {
+      // Steering: delivered between tool calls after the current turn.
+      // Echoed to the transcript so the message is never invisible.
+      addUserMessage(tab.id, msg)
       try {
         await window.pi.session.steer(tab.sessionId, msg)
       } catch (err) {
         console.error('[steer]', err)
       }
     } else {
+      // idle / booting / error — prompt (pi buffers until the process is ready)
       addUserMessage(tab.id, msg)
       setTabStatus(tab.id, 'thinking')
       try {
@@ -252,7 +255,7 @@ export default function InputArea() {
       void handleAbort()
       return
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       send()
     }
@@ -271,7 +274,11 @@ export default function InputArea() {
 
   async function handleAbort() {
     if (!tab?.sessionId) return
-    await window.pi.session.abort(tab.sessionId)
+    try {
+      await window.pi.session.abort(tab.sessionId)
+    } catch (err) {
+      console.error('[abort]', err)
+    }
   }
 
   async function handleDrop(e: DragEvent<HTMLDivElement>) {

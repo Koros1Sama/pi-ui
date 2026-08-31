@@ -62,20 +62,21 @@ export default function SlashCommandMenu({
     >
       {commands.map((cmd, i) => (
         <div
-          key={cmd.name}
+          key={`${cmd.source}:${cmd.name}`}
           ref={(el) => {
             itemRefs.current[i] = el
           }}
           role="option"
           aria-selected={i === activeIndex}
+          title={args ? 'Arguments typed — Enter sends the text as-is' : undefined}
           onMouseDown={(e) => {
             // mouseDown prevents textarea blur before click fires
             e.preventDefault()
             if (!args) onSelect(cmd)
           }}
           className={`flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs ${
-            i === activeIndex ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'
-          }`}
+            args ? 'opacity-50' : ''
+          } ${i === activeIndex ? 'bg-zinc-800' : 'hover:bg-zinc-800/50'}`}
         >
           <span className="font-mono text-zinc-200">{cmd.name}</span>
           <span className={`shrink-0 text-[10px] ${SOURCE_COLORS[cmd.source]}`}>{cmd.source}</span>

@@ -52,6 +52,15 @@ export function usePiEvents(): void {
         setTabStatus(tabId, 'booting')
       }),
 
+      window.pi.on('pi:session-ready', ({ sessionId }) => {
+        const tabId = findTabId(sessionId)
+        if (!tabId) return
+        // A freshly booted session becomes usable (booting → idle) without
+        // clobbering a thinking state if the user already sent.
+        const tab = useStore.getState().tabs.tabs.find((t) => t.id === tabId)
+        if (tab && tab.status === 'booting') setTabStatus(tabId, 'idle')
+      }),
+
       window.pi.on('pi:tool-start', ({ sessionId, toolCallId, toolName, args }) => {
         flushTokens()
         const tabId = findTabId(sessionId)
@@ -92,6 +101,10 @@ export function usePiEvents(): void {
         flushTokens()
         const tabId = findTabId(sessionId)
         if (!tabId) return
+        // Pin whatever partial text arrived instead of leaving a live
+        // streaming cursor under an error status (and merging with the
+        // next response after recovery).
+        finalizeAssistantMessage(tabId)
         setTabStatus(tabId, 'error')
       }),
     ]

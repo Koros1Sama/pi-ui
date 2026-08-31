@@ -37,6 +37,26 @@ export default function SettingsModal() {
   )
   const [favorites, setFavorites] = useState<string[]>(config.favoriteModels ?? [])
 
+  // Mounted at app boot — local state captured the EMPTY config before
+  // config:get() resolved (saving would silently wipe stored settings).
+  // Reset during render when the modal opens (derived-reset pattern).
+  const [prevOpen, setPrevOpen] = useState(ui.settingsOpen)
+  if (ui.settingsOpen !== prevOpen) {
+    setPrevOpen(ui.settingsOpen)
+    if (ui.settingsOpen) {
+      setSystemPrompt(config.systemPrompt)
+      setDefaultWorkingDirectory(config.defaultWorkingDirectory ?? '')
+      setThinking(config.defaultThinkingLevel)
+      setDefaultModel(
+        config.defaultModel && config.defaultProvider
+          ? `${config.defaultProvider}/${config.defaultModel}`
+          : ''
+      )
+      setFavorites(config.favoriteModels ?? [])
+      setApiKeys({})
+    }
+  }
+
   async function toggleFavorite(key: string) {
     const next = favorites.includes(key) ? favorites.filter((f) => f !== key) : [...favorites, key]
     setFavorites(next)

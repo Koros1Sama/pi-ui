@@ -306,11 +306,13 @@ export class RpcProcess extends EventEmitter {
   private handleExtensionUiRequest(parsed: Record<string, unknown>): void {
     const method = String(parsed['method'] ?? '')
     const id = parsed['id']
-    // Dialog methods block the extension until answered. If a host UI is
-    // attached it takes over ('ui-request'); otherwise dismiss so the agent
-    // keeps running (extension receives undefined/false). Fire-and-forget
-    // methods (notify/setStatus/…) need no response.
-    if (DIALOG_UI_METHODS.has(method) && typeof id === 'string') {
+    // Dialog methods block the extension until answered — forward to the host
+    // UI when attached, else dismiss so the agent keeps running (extension
+    // receives undefined/false). Fire-and-forget methods (notify/setStatus/…)
+    // don't need a response but are still forwarded so notifications reach
+    // the UI (pi:notify) instead of vanishing.
+    if (typeof id !== 'string') return
+    if (DIALOG_UI_METHODS.has(method)) {
       if (this.listenerCount('ui-request') > 0) {
         this.emit('ui-request', parsed)
         return
@@ -320,6 +322,8 @@ export class RpcProcess extends EventEmitter {
       } catch {
         // process already gone
       }
+    } else if (this.listenerCount('ui-request') > 0) {
+      this.emit('ui-request', parsed)
     }
   }
 

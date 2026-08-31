@@ -17,7 +17,7 @@ const LEVELS: AppThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', '
 export default function Toolbar() {
   const tab = useActiveTab()
   const availableModels = useAvailableModels()
-  const replaceTab = useStore((s) => s.replaceTab)
+  const patchTab = useStore((s) => s.patchTab)
   const toggleDiffPane = useStore((s) => s.toggleDiffPane)
 
   if (!tab) return null
@@ -30,7 +30,8 @@ export default function Toolbar() {
       // Real RPC set_model — the TUI-only "/model" text command does not
       // execute through the RPC prompt path.
       await window.pi.session.setModel(tab.sessionId, p, m)
-      replaceTab(tab.id, { ...tab, model: m, provider: p })
+      // patchTab avoids clobbering streaming state with a stale snapshot.
+      patchTab(tab.id, { model: m, provider: p })
     } catch (err) {
       console.error(err)
     }
@@ -40,7 +41,7 @@ export default function Toolbar() {
     if (!tab) return
     try {
       await window.pi.session.setThinking(tab.sessionId, level)
-      replaceTab(tab.id, { ...tab, thinkingLevel: level })
+      patchTab(tab.id, { thinkingLevel: level })
     } catch (err) {
       console.error(err)
     }

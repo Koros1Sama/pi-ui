@@ -301,7 +301,18 @@ export class IpcBridge {
     )
 
     this.handle('sessions:delete', async (_e, { sessionId }: { sessionId: string }) => {
-      await this.store.deleteMetaById(sessionId)
+      try {
+        // Refuse to delete a session a live tab is still running (two-writer
+        // hazard on the JSONL).
+        const live = this.sessions.getActiveSessionsWithSdk()
+        if (live.some((l) => l.sdkSessionId === sessionId)) {
+          throw new Error('Session is open in a live tab — close the tab first')
+        }
+        await this.store.deleteSessionFile(sessionId)
+      } catch (err) {
+        console.error('[sessions:delete]', err)
+        throw err
+      }
     })
 
     this.handle(

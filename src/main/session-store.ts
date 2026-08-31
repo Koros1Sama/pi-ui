@@ -9,7 +9,10 @@ import { dirname, basename, join } from 'path'
 import type { SessionSummary, SessionMeta, Message } from '@shared/types'
 import { convertAgentMessages } from './agent-messages'
 
-export type FsLike = Pick<typeof fs, 'existsSync' | 'readFileSync' | 'writeFileSync' | 'mkdirSync'>
+export type FsLike = Pick<
+  typeof fs,
+  'existsSync' | 'readFileSync' | 'writeFileSync' | 'mkdirSync' | 'unlinkSync'
+>
 
 export class SessionStore {
   private readonly pathById = new Map<string, string>()
@@ -23,6 +26,7 @@ export class SessionStore {
     firstUserSnippet: string | null
   } {
     let modelId: string | null = null
+    let firstUserSnippet: string | null = null
     try {
       const content = this.fsImpl.readFileSync(sessionPath, 'utf-8') as string
       for (const line of content.split('\n')) {
@@ -37,9 +41,16 @@ export class SessionStore {
         } catch {
           continue
         }
+        // pi appends model_change entries after user messages on every
+        // mid-session model switch — keep scanning to the end so the sidebar
+        // shows the CURRENT model, not the initial one.
         if (entry.type === 'model_change' && entry.modelId) {
           modelId = entry.modelId
-        } else if (entry.type === 'message' && entry.message?.role === 'user') {
+        } else if (
+          entry.type === 'message' &&
+          entry.message?.role === 'user' &&
+          firstUserSnippet === null
+        ) {
           const c = entry.message.content
           const text =
             typeof c === 'string'
@@ -51,13 +62,13 @@ export class SessionStore {
                     .join('')
                 : ''
           const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 60)
-          return { modelId, firstUserSnippet: snippet || null }
+          if (snippet) firstUserSnippet = snippet
         }
       }
     } catch {
       // ignore
     }
-    return { modelId, firstUserSnippet: null }
+    return { modelId, firstUserSnippet }
   }
 
   async list(activeSessionIds: string[]): Promise<SessionSummary[]> {
@@ -122,6 +133,26 @@ export class SessionStore {
     const cwdDir = this.pathById.get(sessionId)
     if (!cwdDir) throw new Error(`Unknown session: ${sessionId}`)
     await this.deleteMeta(cwdDir, sessionId)
+  }
+
+  /** Actually delete a stored session: the JSONL file plus its meta entry. */
+  async deleteSessionFile(sessionId: string): Promise<void> {
+    const jsonl = this.jsonlPathById.get(sessionId)
+    const cwdDir = this.pathById.get(sessionId)
+    if (cwdDir) {
+      await this.deleteMeta(cwdDir, sessionId).catch(() => undefined)
+    }
+    if (jsonl) {
+      try {
+        this.fsImpl.unlinkSync(jsonl)
+      } catch {
+        // already gone — treat as deleted
+      }
+      this.jsonlPathById.delete(sessionId)
+      this.pathById.delete(sessionId)
+    } else if (!cwdDir) {
+      throw new Error(`Unknown session: ${sessionId}`)
+    }
   }
 
   async setNameById(sdkSessionId: string, name: string): Promise<void> {

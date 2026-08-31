@@ -270,8 +270,14 @@ describe('SessionService (RPC engine)', () => {
   })
 
   describe('steer', () => {
-    it('writes a steer command', async () => {
+    it('writes a steer command when the agent is streaming', async () => {
       const sessionId = await createSession()
+      rpcMock.shared.responder = async (cmd) => {
+        if (cmd['type'] === 'get_state') {
+          return { sessionId: 'sdk-1', sessionFile: '/sessions/live.jsonl', isStreaming: true }
+        }
+        return defaultHandler(cmd)
+      }
       await service.steer(sessionId, 'please stop')
       expect(
         lastRpc().written.find((c) => c['type'] === 'steer' && c['message'] === 'please stop')

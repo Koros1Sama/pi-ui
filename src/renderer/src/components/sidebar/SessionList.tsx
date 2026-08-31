@@ -106,9 +106,13 @@ export default function SessionList() {
   }
 
   async function handleSelectSession(session: SessionSummary) {
-    // Deduplication: if a tab already has this session open, just focus it
-    const existing = tabs.find(
-      (t) => t.readonlySessionId === session.id || t.sessionId === session.id
+    // Deduplication: if a tab already has this session open (live via
+    // liveSessionId, or readonly via readonlySessionId), just focus it.
+    // Read live state — the render-time `tabs` snapshot misses rapid double
+    // clicks before re-render.
+    const liveTabs = useStore.getState().tabs.tabs
+    const existing = liveTabs.find(
+      (t) => t.readonlySessionId === session.id || t.id === session.liveSessionId
     )
     if (existing) {
       setActiveTab(existing.id)
@@ -163,6 +167,10 @@ export default function SessionList() {
   }
 
   async function handleDelete(session: SessionSummary) {
+    // Deletion is real now (removes the JSONL) — confirm first.
+    if (!window.confirm(`Delete session "${session.name ?? session.id}"? This cannot be undone.`)) {
+      return
+    }
     await window.pi.sessions.delete(session.id)
     const updated = await window.pi.sessions.list()
     setSessions(updated)

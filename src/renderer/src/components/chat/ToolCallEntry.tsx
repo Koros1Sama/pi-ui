@@ -1,5 +1,5 @@
 // src/renderer/src/components/chat/ToolCallEntry.tsx
-import { useState } from 'react'
+import { memo, useState } from 'react'
 import type { ToolCall } from '@shared/types'
 import { isDiff, sliceHunk } from '@/lib/diff-utils'
 
@@ -248,7 +248,7 @@ function FileListOutput({ call, expanded }: { call: ToolCall; expanded: boolean 
 const EDIT_TOOLS = new Set(['edit', 'write', 'read_write', 'patch'])
 const FILE_LIST_TOOLS = new Set(['grep', 'find', 'ls'])
 
-export default function ToolCallEntry({ call }: Props) {
+function ToolCallEntryInner({ call }: Props) {
   const displayPath = getDisplayPath(call)
   const done = call.status === 'done'
   const hasResult = done && !!call.result?.trim()
@@ -328,3 +328,8 @@ export default function ToolCallEntry({ call }: Props) {
     </div>
   )
 }
+
+// memo'd: immer keeps `call` referentially stable, so past tool entries skip
+// re-rendering (and re-splitting large outputs) on every 60ms token flush.
+const ToolCallEntry = memo(ToolCallEntryInner)
+export default ToolCallEntry

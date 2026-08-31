@@ -68,6 +68,11 @@ export class ModelService {
     hub.on('exit', () => {
       if (this.hub === hub) this.hub = null
     })
+    // EventEmitter 'error' with no listener crashes the main process.
+    hub.on('error', (err) => {
+      console.error('[model-service] hub spawn error:', err)
+      if (this.hub === hub) this.hub = null
+    })
     hub.start()
     this.hub = hub
     try {
@@ -78,5 +83,12 @@ export class ModelService {
       throw err
     }
     return hub
+  }
+
+  /** Kill the shared hub (app shutdown). */
+  dispose(): void {
+    const hub = this.hub
+    this.hub = null
+    if (hub) void hub.dispose()
   }
 }

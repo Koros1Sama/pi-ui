@@ -10,6 +10,17 @@ import { SessionService } from './session-service'
 import { IpcBridge } from './ipc-bridge'
 import { SessionStore } from './session-store'
 
+// ── Service singletons ──────────────────────────────────────────────────────
+// Created once at module scope: rebuilt windows (macOS activate) reuse the
+// same session/model stacks so old pi subprocesses are never orphaned, and
+// app quit tears everything down deterministically instead of relying on
+// stdin-EOF propagation to the children.
+const auth = new AuthService()
+const settings = new SettingsService()
+const prefs = new PreferencesService(app.getPath('userData'))
+const sessions = new SessionService()
+const models = new ModelService(sessions)
+
 async function createWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1280,
@@ -30,12 +41,6 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
     },
   })
-
-  const auth = new AuthService()
-  const settings = new SettingsService()
-  const prefs = new PreferencesService(app.getPath('userData'))
-  const sessions = new SessionService()
-  const models = new ModelService(sessions)
 
   const store = new SessionStore()
   const bridge = new IpcBridge(win, auth, models, settings, prefs, sessions, store)
@@ -80,6 +85,11 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  sessions.disposeAll()
+  models.dispose()
 })
 
 app.on('window-all-closed', () => {

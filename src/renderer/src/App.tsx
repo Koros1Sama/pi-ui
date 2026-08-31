@@ -19,7 +19,7 @@ export default function App() {
   const setModels = useStore((s) => s.setModels)
   const openSettings = useStore((s) => s.openSettings)
   const setSessions = useStore((s) => s.setSessions)
-  const setExtensionDialog = useStore((s) => s.setExtensionDialog)
+  const pushExtensionDialog = useStore((s) => s.pushExtensionDialog)
   const setTreePicker = useStore((s) => s.setTreePicker)
   const setToast = useStore((s) => s.setToast)
   const tabCount = useStore((s) => s.tabs.tabs.length)
@@ -64,7 +64,7 @@ export default function App() {
       void loadSessions()
     })
     const offUi = window.pi.on('pi:ui-request', (payload) => {
-      setExtensionDialog(payload)
+      pushExtensionDialog(payload)
     })
     const offTree = window.pi.on('pi:tree-picker', (payload) => {
       setTreePicker(payload)
@@ -78,7 +78,7 @@ export default function App() {
       offTree()
       offNotify()
     }
-  }, [loadSessions, setExtensionDialog, setTreePicker, setToast])
+  }, [loadSessions, pushExtensionDialog, setTreePicker, setToast])
 
   useEffect(() => {
     async function cycleModel(backward: boolean) {
@@ -87,14 +87,16 @@ export default function App() {
       if (!tab || tab.mode !== 'active') return
       try {
         const next = await window.pi.session.cycleModel(tab.sessionId, backward)
-        state.replaceTab(tab.id, { ...tab, provider: next.provider, model: next.modelId })
+        // patchTab mutates only these fields — a whole-tab replace here could
+        // revert tokens/status that streamed in during the RPC round trip.
+        state.patchTab(tab.id, { provider: next.provider, model: next.modelId })
         state.setToast({ message: `⇄ ${next.displayName}`, level: 'info' })
       } catch (err) {
         console.error('[cycleModel]', err)
       }
     }
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+      if ((e.metaKey || e.ctrlKey) && e.code === 'Comma') {
         e.preventDefault()
         openSettings()
         return

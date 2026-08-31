@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button'
 export default function TreePickerDialog() {
   const picker = useStore((s) => s.ui.treePicker)
   const setTreePicker = useStore((s) => s.setTreePicker)
-  const tabs = useStore((s) => s.tabs.tabs)
   const replaceTab = useStore((s) => s.replaceTab)
   const setSessions = useStore((s) => s.setSessions)
   const [busy, setBusy] = useState(false)
@@ -26,9 +25,11 @@ export default function TreePickerDialog() {
     setError(null)
     try {
       const { messages } = await window.pi.session.fork(sessionId, entryId)
-      const tab = tabs.find((t) => t.id === sessionId)
-      if (tab) {
-        replaceTab(tab.id, { ...tab, messages, currentStreamingContent: '', status: 'idle' })
+      // Read fresh tab state — the render snapshot may be stale after the
+      // RPC round trip, and replacing it wholesale would drop streamed state.
+      const fresh = useStore.getState().tabs.tabs.find((t) => t.id === sessionId)
+      if (fresh) {
+        replaceTab(fresh.id, { ...fresh, messages, currentStreamingContent: '', status: 'idle' })
       }
       setTreePicker(null)
       const updated = await window.pi.sessions.list()

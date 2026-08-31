@@ -52,6 +52,9 @@ export interface TabsActions {
     }
   ): void
   replaceTab(tabId: string, newTab: Tab): void
+  /** Narrow field update — unlike replaceTab it can't clobber concurrent
+   *  streaming state (tokens/status) with a stale render-time snapshot. */
+  patchTab(tabId: string, patch: Partial<Pick<Tab, 'model' | 'provider' | 'thinkingLevel'>>): void
   setTabDiff(tabId: string, diff: TabDiff): void
   toggleDiffPane(tabId: string): void
   addDiffComment(tabId: string, comment: DiffComment): void
@@ -144,8 +147,32 @@ export const createTabsSlice = (
     set((s) => {
       const tab = s.tabs.tabs.find((t) => t.id === tabId)
       if (!tab) return
-      const last = tab.messages[tab.messages.length - 1]
-      if (!last) return
+      // Flush any streaming text into a real assistant message first so the
+      // tool call attaches to the message it actually follows — otherwise it
+      // lands on the previous turn (or a user message) and the chronology
+      // scrambles. Post-tool text streams into a fresh bubble.
+      if (tab.currentStreamingContent) {
+        tab.messages.push({
+          id: uuid(),
+          role: 'assistant',
+          content: tab.currentStreamingContent,
+          toolCalls: [],
+          createdAt: Date.now(),
+        })
+        tab.currentStreamingContent = ''
+      }
+      let target = tab.messages[tab.messages.length - 1]
+      if (!target || target.role !== 'assistant') {
+        // Tool call before any assistant text — create a carrier message.
+        target = {
+          id: uuid(),
+          role: 'assistant',
+          content: '',
+          toolCalls: [],
+          createdAt: Date.now(),
+        }
+        tab.messages.push(target)
+      }
       const call: ToolCall = {
         id: toolCallId,
         toolName,
@@ -156,7 +183,7 @@ export const createTabsSlice = (
         durationMs: null,
         status: 'pending',
       }
-      last.toolCalls.push(call)
+      target.toolCalls.push(call)
     }),
 
   resolveToolCall: (tabId, { toolCallId, result, details, isError, durationMs }) =>
@@ -182,6 +209,13 @@ export const createTabsSlice = (
       if (idx === -1) return
       s.tabs.tabs[idx] = newTab
       s.tabs.activeTabId = newTab.id
+    }),
+
+  patchTab: (tabId, patch) =>
+    set((s) => {
+      const tab = s.tabs.tabs.find((t) => t.id === tabId)
+      if (!tab) return
+      Object.assign(tab, patch)
     }),
 
   setTabDiff: (tabId, diff) =>

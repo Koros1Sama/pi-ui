@@ -17,6 +17,7 @@ const mockFs = {
   readFileSync: vi.fn().mockReturnValue('{}'),
   writeFileSync: vi.fn(),
   mkdirSync: vi.fn(),
+  unlinkSync: vi.fn(),
 }
 
 describe('SessionStore', () => {

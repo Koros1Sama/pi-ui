@@ -43,7 +43,8 @@ export interface UiState {
   updateProgress: number | null
   updateError: string | null
   sessionViewMode: SessionViewMode
-  extensionDialog: ExtensionDialog | null
+  /** FIFO queue — a second request must never silently replace (and strand) the first. */
+  extensionDialogs: ExtensionDialog[]
   treePicker: TreePickerState | null
   toast: ToastState | null
 }
@@ -60,7 +61,8 @@ export interface UiActions {
     error?: string | null
   ): void
   setSessionViewMode(mode: SessionViewMode): void
-  setExtensionDialog(dialog: ExtensionDialog | null): void
+  pushExtensionDialog(dialog: ExtensionDialog): void
+  shiftExtensionDialog(): void
   setTreePicker(picker: TreePickerState | null): void
   setToast(toast: ToastState | null): void
 }
@@ -73,7 +75,7 @@ export const initialUiState: UiState = {
   updateProgress: null,
   updateError: null,
   sessionViewMode: 'grouped',
-  extensionDialog: null,
+  extensionDialogs: [],
   treePicker: null,
   toast: null,
 }
@@ -106,9 +108,13 @@ export const createUiSlice = (set: (fn: (s: { ui: UiState }) => void) => void): 
     set((s) => {
       s.ui.sessionViewMode = mode
     }),
-  setExtensionDialog: (dialog) =>
+  pushExtensionDialog: (dialog) =>
     set((s) => {
-      s.ui.extensionDialog = dialog
+      s.ui.extensionDialogs.push(dialog)
+    }),
+  shiftExtensionDialog: () =>
+    set((s) => {
+      s.ui.extensionDialogs.shift()
     }),
   setTreePicker: (picker) =>
     set((s) => {

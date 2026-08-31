@@ -113,8 +113,10 @@ export default function ChatPane() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <Toolbar />
-      <MessageList />
-      <InputArea />
+      {/* Keyed per tab: draft text, slash-menu state and scroll position
+          must not leak across sessions sharing one component instance. */}
+      <MessageList key={tab.id} />
+      <InputArea key={tab.id} />
     </div>
   )
 }

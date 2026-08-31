@@ -146,18 +146,21 @@ export class SessionService {
 
   async steer(sessionId: string, text: string): Promise<void> {
     const entry = this.getOrThrow(sessionId)
-    try {
-      await entry.rpc.request({ type: 'steer', message: text })
-    } catch (err) {
-      // `steer` only makes sense mid-stream; if the agent already settled,
-      // fall back to a regular prompt so the message is not lost.
-      const state = await this.quietGetState(entry)
-      if (state && !state.isStreaming) {
-        await entry.rpc.request({ type: 'prompt', message: text })
-        return
-      }
-      throw err
+    // Builtins work regardless of streaming state.
+    const builtin = BUILTIN_PATTERN.exec(text.trim())
+    if (builtin) {
+      await this.runBuiltin(sessionId, entry, builtin[1], (builtin[2] ?? '').trim())
+      return
     }
+    // pi's steer never rejects when idle — it silently queues the text for
+    // the NEXT run. Check state first so a stale 'thinking' status in the
+    // renderer doesn't swallow the message into the wrong place.
+    const state = await this.quietGetState(entry)
+    if (state && !state.isStreaming) {
+      await entry.rpc.request({ type: 'prompt', message: text })
+      return
+    }
+    await entry.rpc.request({ type: 'steer', message: text })
   }
 
   async abort(sessionId: string, onEvent: EventCallback): Promise<void> {
@@ -219,10 +222,18 @@ export class SessionService {
   ): Promise<{ sessionId: string; sdkSessionId: string }> {
     const cwd = await readCwdFromSessionFile(sessionPath)
     const { sessionId, entry } = this.attachAndRegister(cwd, [], onEvent)
-    const result = await entry.rpc.request<{ cancelled?: boolean }>({
-      type: 'switch_session',
-      sessionPath,
-    })
+    let result: { cancelled?: boolean }
+    try {
+      result = await entry.rpc.request<{ cancelled?: boolean }>({
+        type: 'switch_session',
+        sessionPath,
+      })
+    } catch (err) {
+      // Corrupt file / missing file / protocol failure — don't leak the
+      // spawned subprocess and phantom session entry on every retry.
+      this.closeSession(sessionId)
+      throw err
+    }
     if (result?.cancelled) {
       this.closeSession(sessionId)
       throw new Error('Session switch cancelled by an extension')
@@ -252,6 +263,14 @@ export class SessionService {
       sessionId,
       sdkSessionId: entry.sdkSessionId,
     }))
+  }
+
+  /** Dispose every session subprocess (app shutdown). */
+  disposeAll(): void {
+    for (const entry of this.sessions.values()) {
+      void entry.rpc.dispose()
+    }
+    this.sessions.clear()
   }
 
   /** Answer a forwarded extension UI dialog (select/confirm/input/editor). */
@@ -343,7 +362,12 @@ export class SessionService {
     }
     this.sessions.set(sessionId, entry)
     this.attachRpc(sessionId, entry, rpc)
-    rpc.start() // throws synchronously if the pi CLI cannot be located
+    try {
+      rpc.start() // throws synchronously if the pi CLI cannot be located
+    } catch (err) {
+      this.sessions.delete(sessionId) // don't leak a phantom never-started entry
+      throw err
+    }
     // Let the tab show a distinct "booting" state until the first stdout line.
     entry.onEvent('pi:booting', { sessionId })
     this.warmup(entry)
@@ -356,6 +380,12 @@ export class SessionService {
     })
     rpc.on('ui-request', (req: Record<string, unknown>) => {
       this.handleUiRequest(sessionId, entry, req)
+    })
+    // EventEmitter 'error' with zero listeners throws and would kill the
+    // whole main process on spawn failure — always route it to recovery.
+    rpc.on('error', (err: Error) => {
+      console.error('[session-service] rpc error:', err)
+      this.handleUnexpectedExit(sessionId, entry)
     })
     rpc.on('exit', () => {
       this.handleUnexpectedExit(sessionId, entry)
@@ -409,7 +439,7 @@ export class SessionService {
             summary?: string
             estimatedTokensAfter?: number
             tokensBefore?: number
-          }>({ type: 'compact' })
+          }>({ type: 'compact', customInstructions: args || undefined })
           const from =
             typeof r?.tokensBefore === 'number'
               ? ` (~${Math.round(r.tokensBefore / 1000)}k tokens)`
@@ -479,7 +509,10 @@ export class SessionService {
           break
         }
         case 'export': {
-          const e = await entry.rpc.request<{ path?: string }>({ type: 'export_html' })
+          const e = await entry.rpc.request<{ path?: string }>({
+            type: 'export_html',
+            outputPath: args || undefined,
+          })
           this.emitAssistantText(
             sessionId,
             entry,
@@ -501,11 +534,12 @@ export class SessionService {
 
   /** Fetch sessionFile/sdkSessionId and prime the slash-command cache in the background. */
   private warmup(entry: ActiveSession): void {
+    const sessionId = Array.from(this.sessions.entries()).find(([, e]) => e === entry)?.[0] ?? ''
     entry.rpc.booted
       .then(async () => {
         await this.captureState(entry).catch(() => undefined)
         entry.onEvent('pi:session-ready', {
-          sessionId: Array.from(this.sessions.entries()).find(([, e]) => e === entry)?.[0] ?? '',
+          sessionId,
           sdkSessionId: entry.sdkSessionId,
         })
         if (!entry.commandsCache) {
@@ -517,7 +551,14 @@ export class SessionService {
             .catch(() => undefined)
         }
       })
-      .catch(() => undefined)
+      .catch((err) => {
+        // Boot watchdog fired (dispose() suppresses the exit event) — without
+        // this the tab would sit in 'booting' forever with the input disabled.
+        entry.onEvent('pi:error', {
+          sessionId,
+          message: `pi failed to boot: ${err instanceof Error ? err.message : String(err)}`,
+        })
+      })
   }
 
   private async captureState(entry: ActiveSession): Promise<void> {
@@ -599,19 +640,25 @@ export class SessionService {
 
   private handleUnexpectedExit(sessionId: string, entry: ActiveSession): void {
     if (this.sessions.get(sessionId) !== entry) return
+    if (entry.restartAttempts >= 1 || !entry.sessionFile) {
+      // No recovery possible — tell the tab it's terminal instead of the
+      // misleading "Attempting to recover…" followed by silence.
+      entry.onEvent('pi:error', {
+        sessionId,
+        message: 'The pi process exited and could not be recovered. Please start a new session.',
+      })
+      this.sessions.delete(sessionId)
+      return
+    }
     entry.onEvent('pi:error', {
       sessionId,
       message: 'The pi process exited unexpectedly. Attempting to recover…',
     })
-    if (entry.restartAttempts >= 1 || !entry.sessionFile) {
-      this.sessions.delete(sessionId)
-      return
-    }
     entry.restartAttempts++
     entry.commandsCache = null
     entry.toolStarts.clear()
     try {
-      const rpc = new RpcProcess({ cwd: entry.cwd, args: [] })
+      const rpc = new RpcProcess({ cwd: entry.cwd, args: entry.spawnArgs })
       entry.rpc = rpc
       this.attachRpc(sessionId, entry, rpc)
       rpc.start()
@@ -700,10 +747,7 @@ interface TreeNode {
 }
 
 /** Flatten the tree for the interactive picker; user messages are fork points. */
-function flattenTree(
-  nodes: TreeNode[],
-  depth = 0
-): Array<{
+function flattenTree(nodes: TreeNode[]): Array<{
   id: string
   role: string
   text: string
@@ -719,7 +763,14 @@ function flattenTree(
     depth: number
     clickable: boolean
   }> = []
-  for (const node of nodes) {
+  // Iterative DFS — pi nests linearly (one entry per level), so long
+  // sessions overflow the call stack with naive recursion.
+  const stack: Array<{ node: TreeNode; depth: number }> = []
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    stack.push({ node: nodes[i]!, depth: 0 })
+  }
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!
     const msg = node.entry?.message
     const role = msg?.role ?? node.entry?.type ?? ''
     const text =
@@ -744,7 +795,9 @@ function flattenTree(
       })
     }
     if (node.children?.length) {
-      result.push(...flattenTree(node.children, depth + 1))
+      for (let i = node.children.length - 1; i >= 0; i--) {
+        stack.push({ node: node.children[i]!, depth: depth + 1 })
+      }
     }
   }
   return result
