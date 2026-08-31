@@ -44,6 +44,7 @@ describe('SettingsService', () => {
         defaultThinkingLevel: 'low',
         systemPrompt: 'Be concise.',
         defaultWorkingDirectory: null,
+        favoriteModels: [],
       })
     })
 
@@ -58,6 +59,7 @@ describe('SettingsService', () => {
         defaultThinkingLevel: 'low',
         systemPrompt: '',
         defaultWorkingDirectory: null,
+        favoriteModels: [],
       })
     })
   })
@@ -75,6 +77,17 @@ describe('SettingsService', () => {
       expect(written.defaultSystemPrompt).toBe('Be brief.')
       expect(written.defaultProvider).toBe('github-copilot') // preserved
       expect(written.someOtherKey).toBe('preserved') // preserved
+    })
+
+    it('persists favorite models under the piUI key and reads them back', async () => {
+      mockReadFile.mockResolvedValue(JSON.stringify({}))
+      await service.setDefaults({ favoriteModels: ['zai/glm-5.3', 'anthropic/claude-sonnet-4-5'] })
+      const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string)
+      expect(written.piUIFavoriteModels).toEqual(['zai/glm-5.3', 'anthropic/claude-sonnet-4-5'])
+
+      mockReadFile.mockResolvedValue(JSON.stringify({ piUIFavoriteModels: ['zai/glm-5.3'] }))
+      const defaults = await service.getDefaults()
+      expect(defaults.favoriteModels).toEqual(['zai/glm-5.3'])
     })
   })
 })

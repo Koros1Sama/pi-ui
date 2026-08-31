@@ -12,7 +12,7 @@ export interface Tab {
   model: string
   provider: string
   thinkingLevel: AppThinkingLevel
-  status: 'idle' | 'thinking' | 'error'
+  status: 'idle' | 'booting' | 'thinking' | 'error'
   messages: Message[]
   currentStreamingContent: string
   mode: TabMode

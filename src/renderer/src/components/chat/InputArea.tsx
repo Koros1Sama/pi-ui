@@ -61,6 +61,7 @@ export default function InputArea() {
   const tab = useActiveTab()
   const addUserMessage = useStore((s) => s.addUserMessage)
   const setTabStatus = useStore((s) => s.setTabStatus)
+  const replaceTab = useStore((s) => s.replaceTab)
   const homedir = useStore((s) => s.config.homedir)
   const [value, setValue] = useState('')
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
@@ -78,7 +79,7 @@ export default function InputArea() {
 
   if (!tab || tab.mode !== 'active') return null
 
-  const thinking = tab.status === 'thinking'
+  const thinking = tab.status === 'thinking' || tab.status === 'booting'
   const validFiles = attachedFiles.filter((f) => !f.error)
   const hasContent = value.trim().length > 0 || validFiles.length > 0
   const canSend = hasContent
@@ -199,8 +200,14 @@ export default function InputArea() {
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    // Shift+Tab cycles the thinking level (pi TUI behavior)
+    if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault()
+      void handleCycleThinking()
+      return
+    }
     if (slashMenuOpen) {
-      if (e.key === 'Tab' && slashArgs && activeCommand?.argChoices?.length) {
+      if (e.key === 'Tab' && !e.shiftKey && slashArgs && activeCommand?.argChoices?.length) {
         // Complete the first matching argument choice (e.g. workflow ids)
         e.preventDefault()
         const match = activeCommand.argChoices.find((c) =>
@@ -239,9 +246,26 @@ export default function InputArea() {
         return
       }
     }
+    // Escape aborts a running agent (pi TUI behavior)
+    if (e.key === 'Escape' && thinking) {
+      e.preventDefault()
+      void handleAbort()
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       send()
+    }
+  }
+
+  async function handleCycleThinking() {
+    if (!tab) return
+    try {
+      const res = await window.pi.session.cycleThinking(tab.sessionId)
+      replaceTab(tab.id, { ...tab, thinkingLevel: res.level })
+      useStore.getState().setToast({ message: `🧠 thinking: ${res.level}`, level: 'info' })
+    } catch (err) {
+      console.error('[cycleThinking]', err)
     }
   }
 
@@ -387,11 +411,11 @@ export default function InputArea() {
           <span
             data-testid="status-dot"
             className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-              tab.status === 'thinking' ? 'animate-pulse' : ''
+              tab.status === 'thinking' || tab.status === 'booting' ? 'animate-pulse' : ''
             }`}
             style={{
               backgroundColor:
-                tab.status === 'thinking'
+                tab.status === 'thinking' || tab.status === 'booting'
                   ? 'var(--pi-warning)'
                   : tab.status === 'error'
                     ? 'var(--pi-error)'
@@ -402,14 +426,14 @@ export default function InputArea() {
             data-testid="status-text"
             style={{
               color:
-                tab.status === 'thinking'
+                tab.status === 'thinking' || tab.status === 'booting'
                   ? 'var(--pi-warning)'
                   : tab.status === 'error'
                     ? 'var(--pi-error)'
                     : 'var(--pi-dim)',
             }}
           >
-            {tab.status}
+            {tab.status === 'booting' ? 'starting pi…' : tab.status}
           </span>
 
           {/* Steering label */}

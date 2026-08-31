@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import type { AppThinkingLevel } from '@shared/types'
 
-const LEVELS: AppThinkingLevel[] = ['off', 'low', 'high']
+const LEVELS: AppThinkingLevel[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 export default function Toolbar() {
   const tab = useActiveTab()
@@ -31,6 +31,16 @@ export default function Toolbar() {
       // execute through the RPC prompt path.
       await window.pi.session.setModel(tab.sessionId, p, m)
       replaceTab(tab.id, { ...tab, model: m, provider: p })
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  async function handleThinkingChange(level: AppThinkingLevel) {
+    if (!tab) return
+    try {
+      await window.pi.session.setThinking(tab.sessionId, level)
+      replaceTab(tab.id, { ...tab, thinkingLevel: level })
     } catch (err) {
       console.error(err)
     }
@@ -78,14 +88,16 @@ export default function Toolbar() {
         {LEVELS.map((level) => (
           <button
             key={level}
+            title={`Set thinking level (${level}) — Shift+Tab cycles`}
+            onClick={() => void handleThinkingChange(level)}
             className={cn(
-              'px-2 py-0.5 capitalize transition-colors',
+              'px-2 py-0.5 text-[11px] capitalize transition-colors',
               tab.thinkingLevel === level
                 ? 'bg-[var(--pi-tool-success-bg)] text-[var(--pi-accent)]'
                 : 'text-zinc-600 hover:text-zinc-400'
             )}
           >
-            {level}
+            {level === 'minimal' ? 'mini' : level}
           </button>
         ))}
       </div>

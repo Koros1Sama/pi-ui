@@ -58,20 +58,55 @@ describe('usePiEvents', () => {
     expect(mockOn).toHaveBeenCalledWith('pi:error', expect.any(Function))
   })
 
-  it('appends token on pi:token event', () => {
-    renderHook(() => usePiEvents())
-    act(() => {
-      handlers['pi:token']({ sessionId: 'sess-1', delta: 'Hello' })
-    })
-    expect(getTab().currentStreamingContent).toBe('Hello')
+  it('appends token on pi:token event (after the batch flush)', () => {
+    vi.useFakeTimers()
+    try {
+      renderHook(() => usePiEvents())
+      act(() => {
+        handlers['pi:token']({ sessionId: 'sess-1', delta: 'Hello' })
+      })
+      act(() => {
+        vi.advanceTimersByTime(60)
+      })
+      expect(getTab().currentStreamingContent).toBe('Hello')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('sets status to thinking on pi:token', () => {
-    renderHook(() => usePiEvents())
-    act(() => {
-      handlers['pi:token']({ sessionId: 'sess-1', delta: 'x' })
-    })
-    expect(getTab().status).toBe('thinking')
+  it('sets status to thinking on pi:token (after the batch flush)', () => {
+    vi.useFakeTimers()
+    try {
+      renderHook(() => usePiEvents())
+      act(() => {
+        handlers['pi:token']({ sessionId: 'sess-1', delta: 'x' })
+      })
+      act(() => {
+        vi.advanceTimersByTime(60)
+      })
+      expect(getTab().status).toBe('thinking')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('batches rapid tokens into one append per flush', () => {
+    vi.useFakeTimers()
+    try {
+      renderHook(() => usePiEvents())
+      act(() => {
+        handlers['pi:token']({ sessionId: 'sess-1', delta: 'a' })
+        handlers['pi:token']({ sessionId: 'sess-1', delta: 'b' })
+      })
+      // Not flushed yet — batching keeps rapid deltas off the store
+      expect(getTab().currentStreamingContent).toBe('')
+      act(() => {
+        vi.advanceTimersByTime(60)
+      })
+      expect(getTab().currentStreamingContent).toBe('ab')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('finalizes message and sets idle on pi:idle', () => {

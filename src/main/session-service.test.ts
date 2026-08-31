@@ -88,7 +88,19 @@ function defaultHandler(cmd: Record<string, unknown>): Promise<unknown> {
         sessionId: 'sdk-1',
         sessionFile: '/sessions/live.jsonl',
         isStreaming: false,
+        thinkingLevel: 'low',
+        model: { id: 'glm-5.3', provider: 'zai', name: 'GLM 5.3' },
       })
+    case 'get_available_models':
+      return Promise.resolve({
+        models: [
+          { id: 'glm-5.3', provider: 'zai', name: 'GLM 5.3' },
+          { id: 'glm-5.3-flash', provider: 'zai', name: 'GLM 5.3 Flash' },
+          { id: 'claude-sonnet-4-5', provider: 'anthropic', name: 'Claude Sonnet 4.5' },
+        ],
+      })
+    case 'get_available_thinking_levels':
+      return Promise.resolve({ levels: ['off', 'low', 'high', 'max'] })
     case 'get_commands':
       return Promise.resolve({
         commands: [
@@ -414,13 +426,22 @@ describe('SessionService (RPC engine)', () => {
       expect(onEvent).toHaveBeenCalledWith('pi:turn-end', { sessionId })
     })
 
-    it('maps agent_end and agent_settled to pi:idle', async () => {
+    it('maps agent_settled (not agent_end) to pi:idle', async () => {
       const sessionId = await createSession()
       onEvent.mockClear()
       lastRpc().emitCustom('agent-event', { type: 'agent_end' })
+      expect(onEvent).not.toHaveBeenCalledWith('pi:idle', expect.anything())
       lastRpc().emitCustom('agent-event', { type: 'agent_settled' })
       expect(onEvent).toHaveBeenCalledWith('pi:idle', { sessionId })
-      expect(onEvent).toHaveBeenCalledTimes(2)
+      expect(onEvent).toHaveBeenCalledTimes(1)
+    })
+
+    it('emits pi:booting when the subprocess spawns', async () => {
+      onEvent.mockClear()
+      await createSession()
+      expect(onEvent).toHaveBeenCalledWith('pi:booting', {
+        sessionId: expect.any(String),
+      })
     })
 
     it('maps extension_error to pi:error', async () => {
@@ -720,6 +741,62 @@ describe('SessionService (RPC engine)', () => {
         message: 'requires interactive TUI mode',
         level: 'error',
       })
+    })
+  })
+
+  describe('model + thinking cycling (shortcuts)', () => {
+    it('cycleModel with favorites stays inside the favorite pool', async () => {
+      const sessionId = await createSession()
+      const next = await service.cycleModel(sessionId, ['anthropic/claude-sonnet-4-5'], false)
+      expect(next).toEqual({
+        provider: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+        displayName: 'Claude Sonnet 4.5',
+      })
+      expect(
+        lastRpc().written.find(
+          (c) =>
+            c['type'] === 'set_model' &&
+            c['provider'] === 'anthropic' &&
+            c['modelId'] === 'claude-sonnet-4-5'
+        )
+      ).toBeDefined()
+    })
+
+    it('cycleModel without favorites walks all models and wraps backward', async () => {
+      const sessionId = await createSession()
+      // current = zai/glm-5.3 (index 0) → backward wraps to the last entry
+      const next = await service.cycleModel(sessionId, [], true)
+      expect(next.modelId).toBe('claude-sonnet-4-5')
+      const forward = await service.cycleModel(sessionId, [], false)
+      expect(forward.modelId).toBe('glm-5.3-flash')
+    })
+
+    it('cycleModel returns the current model without switching when it is the only favorite', async () => {
+      const sessionId = await createSession()
+      const rpc = lastRpc()
+      const next = await service.cycleModel(sessionId, ['zai/glm-5.3'], false)
+      expect(next.modelId).toBe('glm-5.3')
+      expect(rpc.written.some((c) => c['type'] === 'set_model')).toBe(false)
+    })
+
+    it('cycleThinking advances through the model-supported levels', async () => {
+      const sessionId = await createSession()
+      const res = await service.cycleThinking(sessionId)
+      // defaultHandler state: thinkingLevel 'low' → next is 'high'
+      expect(res.level).toBe('high')
+      expect(res.levels).toEqual(['off', 'low', 'high', 'max'])
+      expect(
+        lastRpc().written.find((c) => c['type'] === 'set_thinking_level' && c['level'] === 'high')
+      ).toBeDefined()
+    })
+
+    it('setThinking writes the exact level', async () => {
+      const sessionId = await createSession()
+      await service.setThinking(sessionId, 'max')
+      expect(
+        lastRpc().written.find((c) => c['type'] === 'set_thinking_level' && c['level'] === 'max')
+      ).toBeDefined()
     })
   })
 })

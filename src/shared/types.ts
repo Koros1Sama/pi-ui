@@ -1,7 +1,7 @@
 // src/shared/types.ts
 
-/** Subset of pi SDK ThinkingLevel values exposed in the UI */
-export type AppThinkingLevel = 'off' | 'low' | 'high'
+/** pi SDK ThinkingLevel values exposed in the UI */
+export type AppThinkingLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 export interface ModelEntry {
   provider: string
@@ -25,6 +25,8 @@ export interface AppConfig {
   systemPrompt: string
   homedir: string
   defaultWorkingDirectory: string | null
+  /** "provider/modelId" entries; Ctrl+P cycles these when non-empty */
+  favoriteModels: string[]
 }
 
 export interface AppDefaults {
@@ -33,6 +35,7 @@ export interface AppDefaults {
   defaultThinkingLevel: AppThinkingLevel
   systemPrompt: string
   defaultWorkingDirectory: string | null
+  favoriteModels: string[]
 }
 
 export interface Preferences {
@@ -117,6 +120,8 @@ export interface PiEventPayloads {
   'pi:turn-end': { sessionId: string }
   'pi:idle': { sessionId: string }
   'pi:error': { sessionId: string; message: string }
+  /** Emitted when a session's RPC subprocess is spawned and still booting. */
+  'pi:booting': { sessionId: string }
   /** Emitted once a spawned/resumed RPC session reports its state (sidebar refresh). */
   'pi:session-ready': { sessionId: string; sdkSessionId: string | null }
   /** A blocking extension dialog forwarded from the pi subprocess, awaiting an answer. */
@@ -197,6 +202,12 @@ export interface PiAPI {
       response: { value?: string; confirmed?: boolean; cancelled?: boolean }
     ): Promise<void>
     fork(sessionId: string, entryId: string): Promise<{ messages: Message[] }>
+    cycleModel(
+      sessionId: string,
+      backward?: boolean
+    ): Promise<{ provider: string; modelId: string; displayName: string }>
+    cycleThinking(sessionId: string): Promise<{ level: AppThinkingLevel; levels: string[] }>
+    setThinking(sessionId: string, level: AppThinkingLevel): Promise<void>
     abort(sessionId: string): Promise<void>
     close(sessionId: string): Promise<void>
   }

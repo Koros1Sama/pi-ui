@@ -35,6 +35,18 @@ export default function SettingsModal() {
       ? `${config.defaultProvider}/${config.defaultModel}`
       : ''
   )
+  const [favorites, setFavorites] = useState<string[]>(config.favoriteModels ?? [])
+
+  async function toggleFavorite(key: string) {
+    const next = favorites.includes(key) ? favorites.filter((f) => f !== key) : [...favorites, key]
+    setFavorites(next)
+    try {
+      await window.pi.config.setDefaults({ favoriteModels: next })
+      setConfig({ ...config, favoriteModels: next })
+    } catch (err) {
+      console.error('[favorites]', err)
+    }
+  }
 
   async function handleSaveApiKey(provider: string) {
     const key = apiKeys[provider]
@@ -200,6 +212,34 @@ export default function SettingsModal() {
                   {level}
                 </button>
               ))}
+            </div>
+          </div>
+          <div className="mb-3">
+            <label className="mb-1.5 block text-[10px] uppercase tracking-widest text-zinc-600">
+              Favorite Models — Ctrl+P cycles these
+            </label>
+            <p className="mb-1.5 text-[10px] text-zinc-600">
+              Star the models you switch between. Empty = cycles all models.
+            </p>
+            <div className="max-h-40 space-y-0.5 overflow-y-auto rounded border border-zinc-900 p-1">
+              {config.models.map((m) => {
+                const key = `${m.provider}/${m.modelId}`
+                const active = favorites.includes(key)
+                return (
+                  <button
+                    key={key}
+                    data-testid={`favorite-${key}`}
+                    onClick={() => void toggleFavorite(key)}
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-zinc-800"
+                  >
+                    <span className={active ? 'text-amber-400' : 'text-zinc-600'}>
+                      {active ? '★' : '☆'}
+                    </span>
+                    <span className="truncate text-zinc-300">{m.displayName}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-zinc-600">{m.provider}</span>
+                  </button>
+                )
+              })}
             </div>
           </div>
           <div className="mb-3">

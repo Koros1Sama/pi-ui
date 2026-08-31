@@ -49,6 +49,7 @@ describe('SettingsModal', () => {
       systemPrompt: '',
       homedir: '/Users/test',
       defaultWorkingDirectory: null,
+      favoriteModels: [],
     })
     render(<SettingsModal />)
     const input = screen.getByPlaceholderText(/sk-ant/i)

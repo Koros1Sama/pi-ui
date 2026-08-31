@@ -146,6 +146,7 @@ describe('config slice', () => {
       systemPrompt: '',
       homedir: '/Users/test',
       defaultWorkingDirectory: null,
+      favoriteModels: [],
     })
     expect(getStore().config.providers).toHaveLength(1)
     expect(getStore().config.defaultModel).toBe('claude')

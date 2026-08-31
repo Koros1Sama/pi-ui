@@ -264,6 +264,63 @@ export class SessionService {
     entry.rpc.writeUiResponse({ type: 'extension_ui_response', id: requestId, ...response })
   }
 
+  /**
+   * Cycle to the next model (Ctrl+P). When favorites ("provider/modelId")
+   * are configured the pool is limited to them; otherwise all available
+   * models are cycled.
+   */
+  async cycleModel(
+    sessionId: string,
+    favorites: string[],
+    backward = false
+  ): Promise<{ provider: string; modelId: string; displayName: string }> {
+    const entry = this.getOrThrow(sessionId)
+    const state = await entry.rpc.request<{
+      model?: { id?: string; provider?: string; name?: string } | null
+    }>({ type: 'get_state' })
+    const data = await entry.rpc.request<{
+      models?: Array<{ id: string; provider: string; name?: string }>
+    }>({ type: 'get_available_models' })
+    const all = (data?.models ?? []).filter(
+      (m) => typeof m.id === 'string' && typeof m.provider === 'string'
+    )
+    const favSet = new Set(favorites)
+    const pool = favorites.length > 0 ? all.filter((m) => favSet.has(`${m.provider}/${m.id}`)) : all
+    if (pool.length === 0) throw new Error('No models available to cycle')
+    const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : ''
+    const currentIndex = pool.findIndex((m) => `${m.provider}/${m.id}` === currentKey)
+    const step = backward ? -1 : 1
+    const nextIndex = ((currentIndex === -1 ? 0 : currentIndex + step) + pool.length) % pool.length
+    const next = pool[nextIndex]!
+    if (currentIndex !== -1 && `${next.provider}/${next.id}` === currentKey) {
+      // Already the only model in the pool — nothing to switch
+      return { provider: next.provider, modelId: next.id, displayName: next.name ?? next.id }
+    }
+    await entry.rpc.request({ type: 'set_model', provider: next.provider, modelId: next.id })
+    return { provider: next.provider, modelId: next.id, displayName: next.name ?? next.id }
+  }
+
+  /** Set an exact thinking level (Toolbar level buttons). */
+  async setThinking(sessionId: string, level: AppThinkingLevel): Promise<void> {
+    const entry = this.getOrThrow(sessionId)
+    await entry.rpc.request({ type: 'set_thinking_level', level })
+  }
+
+  /** Cycle to the next thinking level the current model supports (Shift+Tab). */
+  async cycleThinking(sessionId: string): Promise<{ level: AppThinkingLevel; levels: string[] }> {
+    const entry = this.getOrThrow(sessionId)
+    const state = await entry.rpc.request<{ thinkingLevel?: string }>({ type: 'get_state' })
+    const data = await entry.rpc.request<{ levels?: string[] }>({
+      type: 'get_available_thinking_levels',
+    })
+    const levels = data?.levels?.length ? data.levels : ['off']
+    const currentIndex = levels.indexOf(String(state?.thinkingLevel ?? 'off'))
+    const nextIndex = ((currentIndex === -1 ? 0 : currentIndex + 1) + levels.length) % levels.length
+    const level = levels[nextIndex]! as AppThinkingLevel
+    await entry.rpc.request({ type: 'set_thinking_level', level })
+    return { level, levels }
+  }
+
   // ── internals ─────────────────────────────────────────────────────────────
 
   private attachAndRegister(
@@ -287,6 +344,8 @@ export class SessionService {
     this.sessions.set(sessionId, entry)
     this.attachRpc(sessionId, entry, rpc)
     rpc.start() // throws synchronously if the pi CLI cannot be located
+    // Let the tab show a distinct "booting" state until the first stdout line.
+    entry.onEvent('pi:booting', { sessionId })
     this.warmup(entry)
     return { sessionId, entry }
   }
@@ -521,7 +580,9 @@ export class SessionService {
       case 'turn_end':
         entry.onEvent('pi:turn-end', { sessionId })
         break
-      case 'agent_end':
+      // Only the settled event means the run is truly over (retries,
+      // compaction and queued follow-ups included). Mapping agent_end too
+      // re-enabled the input mid-run and caused send-race fallbacks.
       case 'agent_settled':
         entry.onEvent('pi:idle', { sessionId })
         break
@@ -554,6 +615,7 @@ export class SessionService {
       entry.rpc = rpc
       this.attachRpc(sessionId, entry, rpc)
       rpc.start()
+      entry.onEvent('pi:booting', { sessionId })
       rpc.booted
         .then(() => rpc.request({ type: 'switch_session', sessionPath: entry.sessionFile }))
         .then(() => this.warmup(entry))

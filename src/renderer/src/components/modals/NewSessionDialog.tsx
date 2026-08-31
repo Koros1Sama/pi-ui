@@ -15,7 +15,15 @@ import { useStore } from '@/store'
 import { useAvailableModels } from '@/hooks/useAvailableModels'
 import type { AppThinkingLevel } from '@shared/types'
 
-const THINKING_LEVELS: AppThinkingLevel[] = ['off', 'low', 'high']
+const THINKING_LEVELS: AppThinkingLevel[] = [
+  'off',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+]
 
 export default function NewSessionDialog() {
   const ui = useStore((s) => s.ui)

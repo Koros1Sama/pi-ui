@@ -81,10 +81,34 @@ export default function App() {
   }, [loadSessions, setExtensionDialog, setTreePicker, setToast])
 
   useEffect(() => {
+    async function cycleModel(backward: boolean) {
+      const state = useStore.getState()
+      const tab = state.tabs.tabs.find((t) => t.id === state.tabs.activeTabId)
+      if (!tab || tab.mode !== 'active') return
+      try {
+        const next = await window.pi.session.cycleModel(tab.sessionId, backward)
+        state.replaceTab(tab.id, { ...tab, provider: next.provider, model: next.modelId })
+        state.setToast({ message: `⇄ ${next.displayName}`, level: 'info' })
+      } catch (err) {
+        console.error('[cycleModel]', err)
+      }
+    }
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault()
         openSettings()
+        return
+      }
+      // Ctrl+P cycles models; Ctrl+Shift+P / Alt+P go backward (pi TUI bindings).
+      // e.code is layout-independent, so Arabic keyboard layouts work too.
+      if (e.code === 'KeyP' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault()
+        void cycleModel(e.shiftKey || e.altKey)
+        return
+      }
+      if (e.code === 'KeyP' && e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault()
+        void cycleModel(true)
       }
     }
     window.addEventListener('keydown', onKeyDown)

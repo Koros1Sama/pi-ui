@@ -24,16 +24,36 @@ export function usePiEvents(): void {
     // Track tool call args by toolCallId so pi:tool-end can access them
     const toolArgs = new Map<string, Record<string, unknown>>()
 
-    const unsubs = [
-      window.pi.on('pi:token', ({ sessionId, delta }) => {
-        console.log(`[usePiEvents] pi:token sessionId=${sessionId} tabId=${findTabId(sessionId)}`)
-        const tabId = findTabId(sessionId)
-        if (!tabId) return
+    // Token batching: every appendToken re-renders the message list (and
+    // re-parses the streaming markdown). Flushing per-token made long
+    // responses janky — accumulate deltas per tab and flush at ~16fps.
+    const pendingTokens = new Map<string, string>()
+    function flushTokens(): void {
+      if (pendingTokens.size === 0) return
+      const entries = Array.from(pendingTokens.entries())
+      pendingTokens.clear()
+      for (const [tabId, delta] of entries) {
         appendToken(tabId, delta)
         setTabStatus(tabId, 'thinking')
+      }
+    }
+
+    const unsubs = [
+      window.pi.on('pi:token', ({ sessionId, delta }) => {
+        const tabId = findTabId(sessionId)
+        if (!tabId) return
+        pendingTokens.set(tabId, (pendingTokens.get(tabId) ?? '') + delta)
+      }),
+
+      window.pi.on('pi:booting', ({ sessionId }) => {
+        flushTokens()
+        const tabId = findTabId(sessionId)
+        if (!tabId) return
+        setTabStatus(tabId, 'booting')
       }),
 
       window.pi.on('pi:tool-start', ({ sessionId, toolCallId, toolName, args }) => {
+        flushTokens()
         const tabId = findTabId(sessionId)
         if (!tabId) return
         toolArgs.set(toolCallId, args)
@@ -61,6 +81,7 @@ export function usePiEvents(): void {
       }),
 
       window.pi.on('pi:idle', ({ sessionId }) => {
+        flushTokens()
         const tabId = findTabId(sessionId)
         if (!tabId) return
         finalizeAssistantMessage(tabId)
@@ -68,13 +89,19 @@ export function usePiEvents(): void {
       }),
 
       window.pi.on('pi:error', ({ sessionId }) => {
+        flushTokens()
         const tabId = findTabId(sessionId)
         if (!tabId) return
         setTabStatus(tabId, 'error')
       }),
     ]
 
-    return () => unsubs.forEach((unsub) => unsub())
+    const flushTimer = setInterval(flushTokens, 60)
+    return () => {
+      clearInterval(flushTimer)
+      flushTokens() // don't lose the tail
+      unsubs.forEach((unsub) => unsub())
+    }
   }, [
     appendToken,
     setTabStatus,

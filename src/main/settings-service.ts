@@ -10,6 +10,8 @@ interface SettingsJson {
   defaultThinkingLevel?: string
   defaultSystemPrompt?: string
   defaultWorkingDirectory?: string | null
+  /** pi-ui: "provider/modelId" entries cycled by Ctrl+P */
+  piUIFavoriteModels?: string[]
   [key: string]: unknown
 }
 
@@ -25,6 +27,7 @@ export class SettingsService {
         (settings.defaultThinkingLevel as AppThinkingLevel | undefined) ?? 'low',
       systemPrompt: settings.defaultSystemPrompt ?? '',
       defaultWorkingDirectory: settings.defaultWorkingDirectory ?? null,
+      favoriteModels: Array.isArray(settings.piUIFavoriteModels) ? settings.piUIFavoriteModels : [],
     }
   }
 
@@ -37,6 +40,7 @@ export class SettingsService {
     if (patch.systemPrompt !== undefined) settings.defaultSystemPrompt = patch.systemPrompt
     if (patch.defaultWorkingDirectory !== undefined)
       settings.defaultWorkingDirectory = patch.defaultWorkingDirectory
+    if (patch.favoriteModels !== undefined) settings.piUIFavoriteModels = patch.favoriteModels
     await mkdir(dirname(SETTINGS_PATH), { recursive: true })
     await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8')
   }

@@ -26,6 +26,7 @@ if (process.env['PI_E2E']) {
     systemPrompt: '',
     homedir: '/Users/test',
     defaultWorkingDirectory: null,
+    favoriteModels: [],
   }
 
   const DEFAULT_MODELS: ModelEntry[] = [
@@ -106,6 +107,13 @@ if (process.env['PI_E2E']) {
       setModel: async () => {},
       uiRespond: async () => {},
       fork: async () => ({ messages: [] }),
+      cycleModel: async () => ({
+        provider: 'Anthropic',
+        modelId: 'claude-sonnet-4-5',
+        displayName: 'Anthropic / claude-sonnet-4-5',
+      }),
+      cycleThinking: async () => ({ level: 'high', levels: ['off', 'low', 'high'] }),
+      setThinking: async () => {},
       abort: async (sessionId) => {
         emit('pi:idle', { sessionId })
       },
@@ -217,6 +225,11 @@ if (process.env['PI_E2E']) {
       uiRespond: (sessionId, requestId, response) =>
         ipcRenderer.invoke('session:uiRespond', { sessionId, requestId, response }),
       fork: (sessionId, entryId) => ipcRenderer.invoke('session:fork', { sessionId, entryId }),
+      cycleModel: (sessionId, backward) =>
+        ipcRenderer.invoke('session:cycleModel', { sessionId, backward }),
+      cycleThinking: (sessionId) => ipcRenderer.invoke('session:cycleThinking', { sessionId }),
+      setThinking: (sessionId, level) =>
+        ipcRenderer.invoke('session:setThinking', { sessionId, level }),
       abort: (sessionId) => ipcRenderer.invoke('session:abort', { sessionId }),
       close: (sessionId) => ipcRenderer.invoke('session:close', { sessionId }),
     },

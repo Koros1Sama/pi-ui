@@ -180,6 +180,47 @@ export class IpcBridge {
       }
     )
 
+    this.handle(
+      'session:cycleModel',
+      async (_e, { sessionId, backward }: { sessionId: string; backward?: boolean }) => {
+        try {
+          const defaults = await this.settings.getDefaults()
+          return await this.sessions.cycleModel(
+            sessionId,
+            defaults.favoriteModels,
+            backward === true
+          )
+        } catch (err) {
+          console.error('[session:cycleModel]', err)
+          throw err
+        }
+      }
+    )
+
+    this.handle('session:cycleThinking', async (_e, { sessionId }: { sessionId: string }) => {
+      try {
+        return await this.sessions.cycleThinking(sessionId)
+      } catch (err) {
+        console.error('[session:cycleThinking]', err)
+        throw err
+      }
+    })
+
+    this.handle(
+      'session:setThinking',
+      async (
+        _e,
+        { sessionId, level }: { sessionId: string; level: import('@shared/types').AppThinkingLevel }
+      ) => {
+        try {
+          await this.sessions.setThinking(sessionId, level)
+        } catch (err) {
+          console.error('[session:setThinking]', err)
+          throw err
+        }
+      }
+    )
+
     this.handle('session:close', (_e, { sessionId }: { sessionId: string }) => {
       this.sessions.closeSession(sessionId)
     })

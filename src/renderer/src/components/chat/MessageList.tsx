@@ -2,6 +2,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import { memo } from 'react'
 import { useStore } from '@/store'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import ToolCallEntry from './ToolCallEntry'
@@ -21,7 +22,9 @@ function PiMarkdown({ children }: { children: string }) {
   )
 }
 
-function UserMessage({ msg }: { msg: Message }) {
+// memo'd: immer keeps untouched message objects referentially stable, so
+// past messages skip re-rendering (and markdown re-parsing) on every token.
+const UserMessage = memo(function UserMessage({ msg }: { msg: Message }) {
   return (
     <div
       data-testid="user-message"
@@ -31,9 +34,15 @@ function UserMessage({ msg }: { msg: Message }) {
       <PiMarkdown>{msg.content}</PiMarkdown>
     </div>
   )
-}
+})
 
-function AssistantMessage({ content, streaming }: { content: string; streaming?: boolean }) {
+const AssistantMessage = memo(function AssistantMessage({
+  content,
+  streaming,
+}: {
+  content: string
+  streaming?: boolean
+}) {
   return (
     <div data-testid="assistant-message" className="mx-3 py-1.5">
       <PiMarkdown>{content}</PiMarkdown>
@@ -45,13 +54,14 @@ function AssistantMessage({ content, streaming }: { content: string; streaming?:
       )}
     </div>
   )
-}
+})
 
 export default function MessageList({ readonlyMessages }: Props = {}) {
   const tab = useStore((s) => s.tabs.tabs.find((t) => t.id === s.tabs.activeTabId))
   const messages = readonlyMessages ?? tab?.messages ?? []
   const streamingContent = readonlyMessages ? '' : (tab?.currentStreamingContent ?? '')
   const isThinking = !readonlyMessages && tab?.status === 'thinking' && !streamingContent
+  const isBooting = !readonlyMessages && tab?.status === 'booting'
   const scrollRef = useAutoScroll<HTMLDivElement>(messages.length + streamingContent.length)
 
   return (
@@ -75,7 +85,7 @@ export default function MessageList({ readonlyMessages }: Props = {}) {
 
       {streamingContent && <AssistantMessage content={streamingContent} streaming />}
 
-      {isThinking && (
+      {(isThinking || isBooting) && (
         <div className="mx-3 flex items-center gap-1 py-3">
           <span
             className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]"
@@ -89,6 +99,11 @@ export default function MessageList({ readonlyMessages }: Props = {}) {
             className="h-1.5 w-1.5 animate-bounce rounded-full"
             style={{ backgroundColor: 'var(--pi-accent)' }}
           />
+          {isBooting && (
+            <span className="ml-2 text-[11px]" style={{ color: 'var(--pi-dim)' }}>
+              Starting pi… first prompt can take ~30–60s
+            </span>
+          )}
         </div>
       )}
     </div>

@@ -34,6 +34,7 @@ describe('NewSessionDialog', () => {
       systemPrompt: '',
       homedir: '/Users/test',
       defaultWorkingDirectory: null,
+      favoriteModels: [],
     })
   })
 
