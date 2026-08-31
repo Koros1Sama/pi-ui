@@ -15,19 +15,23 @@ export const sidebar = {
   settingsBtn: (page: Page) => page.locator('[data-testid="settings-btn"]'),
 }
 
+// Per-chat-pane selectors are suffixed with :visible — every tab's pane
+// stays mounted (hidden) for instant switching, so duplicate elements exist
+// in the DOM and only the active pane's copy is visible.
 export const chat = {
   emptyState: (page: Page) => page.locator('[data-testid="chat-empty-state"]'),
-  messageList: (page: Page) => page.locator('[data-testid="message-list"]'),
-  userMessage: (page: Page, index = 0) => page.locator('[data-testid="user-message"]').nth(index),
+  messageList: (page: Page) => page.locator('[data-testid="message-list"]:visible'),
+  userMessage: (page: Page, index = 0) =>
+    page.locator('[data-testid="user-message"]:visible').nth(index),
   assistantMessage: (page: Page, index = 0) =>
-    page.locator('[data-testid="assistant-message"]').nth(index),
+    page.locator('[data-testid="assistant-message"]:visible').nth(index),
   toolCallEntry: (page: Page, index = 0) =>
-    page.locator('[data-testid="tool-call-entry"]').nth(index),
-  input: (page: Page) => page.locator('[data-testid="chat-input"]'),
-  sendBtn: (page: Page) => page.locator('[data-testid="send-btn"]'),
-  stopBtn: (page: Page) => page.locator('[data-testid="stop-btn"]'),
-  statusDot: (page: Page) => page.locator('[data-testid="status-dot"]'),
-  statusText: (page: Page) => page.locator('[data-testid="status-text"]'),
+    page.locator('[data-testid="tool-call-entry"]:visible').nth(index),
+  input: (page: Page) => page.locator('[data-testid="chat-input"]:visible'),
+  sendBtn: (page: Page) => page.locator('[data-testid="send-btn"]:visible'),
+  stopBtn: (page: Page) => page.locator('[data-testid="stop-btn"]:visible'),
+  statusDot: (page: Page) => page.locator('[data-testid="status-dot"]:visible'),
+  statusText: (page: Page) => page.locator('[data-testid="status-text"]:visible'),
   toolbar: (page: Page) => page.locator('[data-testid="chat-toolbar"]'),
 }
 
@@ -60,8 +64,8 @@ export const sessionHistory = {
   contextMenuPin: (page: Page) => page.locator('[data-testid="context-menu-pin"]'),
   contextMenuDelete: (page: Page) => page.locator('[data-testid="context-menu-delete"]'),
   renameInput: (page: Page) => page.locator('[data-testid="rename-input"]'),
-  resumeBar: (page: Page) => page.locator('[data-testid="resume-bar"]'),
-  resumeBtn: (page: Page) => page.locator('[data-testid="resume-btn"]'),
+  resumeBar: (page: Page) => page.locator('[data-testid="resume-bar"]:visible'),
+  resumeBtn: (page: Page) => page.locator('[data-testid="resume-btn"]:visible'),
 }
 
 export const diffPane = {
@@ -78,9 +82,9 @@ export const diffPane = {
 }
 
 export const fileChips = {
-  container: (page: Page) => page.locator('[data-testid="file-chips"]'),
-  chip: (page: Page, name: string) => page.locator(`[data-testid="file-chip-${name}"]`),
-  attachBtn: (page: Page) => page.locator('[data-testid="attach-btn"]'),
+  container: (page: Page) => page.locator('[data-testid="file-chips"]:visible'),
+  chip: (page: Page, name: string) => page.locator(`[data-testid="file-chip-${name}"]:visible`),
+  attachBtn: (page: Page) => page.locator('[data-testid="attach-btn"]:visible'),
 }
 
 export const tabs = {

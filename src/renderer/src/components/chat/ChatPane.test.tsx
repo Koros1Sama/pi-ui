@@ -146,4 +146,35 @@ describe('ChatPane', () => {
     fireEvent.change(input, { target: { value: 'hello' } })
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
   })
+
+  it('keeps every tab mounted with isolated drafts that survive switches', () => {
+    useStore.getState().createTab(MOCK_TAB)
+    useStore.getState().createTab({ ...MOCK_TAB, id: 's2', sessionId: 's2' })
+    render(<ChatPane />)
+
+    // Both panes stay mounted (inactive one hidden) — no remount on switch.
+    const panes = screen.getAllByTestId(/^chat-pane-/)
+    expect(panes).toHaveLength(2)
+
+    const inputs = screen.getAllByTestId('chat-input')
+    expect(inputs).toHaveLength(2)
+
+    // Type a draft in each tab (DOM order follows the tabs array).
+    fireEvent.change(inputs[0], { target: { value: 'draft tab 1' } })
+    fireEvent.change(inputs[1], { target: { value: 'draft tab 2' } })
+
+    // Switch active tab — only the active pane is visible, no state leaks.
+    useStore.getState().setActiveTab('s2')
+    expect(screen.getByTestId('chat-pane-s2').className).not.toContain('hidden')
+    expect(screen.getByTestId('chat-pane-s1').className).toContain('hidden')
+
+    // Switch back — draft survived because the pane was never unmounted.
+    useStore.getState().setActiveTab('s1')
+    expect(
+      (screen.getByTestId('chat-pane-s1').querySelector('textarea') as HTMLTextAreaElement).value
+    ).toBe('draft tab 1')
+    expect(
+      (screen.getByTestId('chat-pane-s2').querySelector('textarea') as HTMLTextAreaElement).value
+    ).toBe('draft tab 2')
+  })
 })

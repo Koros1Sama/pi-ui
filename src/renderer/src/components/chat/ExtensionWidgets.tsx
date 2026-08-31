@@ -1,17 +1,16 @@
 // src/renderer/src/components/chat/ExtensionWidgets.tsx
 import { useStore } from '@/store'
-import { useActiveTab } from '@/hooks/useActiveTab'
 
 /**
  * Extension-provided info for the active session — mirrors the TUI's
  * ctx.ui.setWidget / setStatus surfaces: widget panels (contacts, model
  * info, …) render above the input; status entries render as compact chips.
  */
-export default function ExtensionWidgets() {
-  const tab = useActiveTab()
-  const sessionId = tab?.id ?? ''
-  const widgets = useStore((s) => s.ui.extensionWidgets.widgets[sessionId])
-  const statuses = useStore((s) => s.ui.extensionWidgets.statuses[sessionId])
+export default function ExtensionWidgets({ tabId }: { tabId: string }) {
+  // Bound to its own tab (keep-mounted panes), NOT the active tab.
+  const tab = useStore((s) => s.tabs.tabs.find((t) => t.id === tabId))
+  const widgets = useStore((s) => s.ui.extensionWidgets.widgets[tabId])
+  const statuses = useStore((s) => s.ui.extensionWidgets.statuses[tabId])
 
   if (tab?.mode !== 'active') return null
 

@@ -23,7 +23,12 @@ export function useAutoScroll<T extends HTMLElement>(trigger: unknown) {
 
   useEffect(() => {
     if (userScrolledUp.current) return
-    ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' })
+    const el = ref.current
+    // Skip while the container is hidden (display:none): its layout is zeroed,
+    // and the trigger will fire again once it becomes visible so the pane
+    // lands at the bottom when revealed.
+    if (!el || el.clientHeight === 0) return
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [trigger])
 
   return ref

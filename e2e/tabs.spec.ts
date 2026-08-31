@@ -48,32 +48,34 @@ test('clicking a tab switches the chat pane to that session', async ({ page }) =
   const sessionId2 = await startSession(page)
 
   // Send a message in session 2 (currently active)
-  await page.fill('[data-testid="chat-input"]', 'session 2 message')
-  await page.click('[data-testid="send-btn"]')
+  await chat.input(page).fill('session 2 message')
+  await chat.sendBtn(page).click()
 
   // Switch to session 1
   await tabs.tab(page, sessionId1).click()
 
-  // Session 1 should have no messages
-  await expect(page.locator('[data-testid="user-message"]')).toHaveCount(0)
+  // Session 1 should have no visible messages (its pane is the active one)
+  await expect(page.locator('[data-testid="user-message"]:visible')).toHaveCount(0)
 
   // Switch back to session 2
   await tabs.tab(page, sessionId2).click()
-  await expect(page.locator('[data-testid="user-message"]')).toContainText('session 2 message')
+  await expect(page.locator('[data-testid="user-message"]:visible')).toContainText(
+    'session 2 message'
+  )
 })
 
 test('each tab maintains its own independent message history', async ({ page }) => {
   const sessionId1 = await startSession(page)
-  await page.fill('[data-testid="chat-input"]', 'message in tab 1')
-  await page.click('[data-testid="send-btn"]')
+  await chat.input(page).fill('message in tab 1')
+  await chat.sendBtn(page).click()
 
   const sessionId2 = await startSession(page)
-  await page.fill('[data-testid="chat-input"]', 'message in tab 2')
-  await page.click('[data-testid="send-btn"]')
+  await chat.input(page).fill('message in tab 2')
+  await chat.sendBtn(page).click()
 
-  // Verify tab 1 doesn't contain tab 2's message
+  // Verify tab 1 doesn't contain tab 2's message (only the active pane is visible)
   await tabs.tab(page, sessionId1).click()
-  const messages = await page.locator('[data-testid="user-message"]').allTextContents()
+  const messages = await page.locator('[data-testid="user-message"]:visible').allTextContents()
   expect(messages.join('\n')).not.toContain('message in tab 2')
   expect(messages.join('\n')).toContain('message in tab 1')
 })

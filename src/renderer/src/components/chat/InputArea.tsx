@@ -1,7 +1,6 @@
 // src/renderer/src/components/chat/InputArea.tsx
 import { useState, useRef, type KeyboardEvent, type DragEvent } from 'react'
 import { useStore } from '@/store'
-import { useActiveTab } from '@/hooks/useActiveTab'
 import { Button } from '@/components/ui/button'
 import FileChips, { type AttachedFile } from './FileChips'
 import SlashCommandMenu from './SlashCommandMenu'
@@ -57,8 +56,9 @@ function buildMessage(text: string, files: AttachedFile[]): string {
   return text ? `${fileParts}\n\n${text}` : fileParts
 }
 
-export default function InputArea() {
-  const tab = useActiveTab()
+export default function InputArea({ tabId }: { tabId: string }) {
+  // Bound to its own tab (keep-mounted panes), NOT the active tab.
+  const tab = useStore((s) => s.tabs.tabs.find((t) => t.id === tabId))
   const addUserMessage = useStore((s) => s.addUserMessage)
   const setTabStatus = useStore((s) => s.setTabStatus)
   const patchTab = useStore((s) => s.patchTab)

@@ -9,6 +9,9 @@ import ToolCallEntry from './ToolCallEntry'
 import type { Message } from '@shared/types'
 
 interface Props {
+  /** Bind this list to a specific tab (keep-mounted panes). Optional for
+   *  readonly rendering driven purely by `readonlyMessages`. */
+  tabId?: string
   readonlyMessages?: Message[]
 }
 
@@ -56,13 +59,18 @@ const AssistantMessage = memo(function AssistantMessage({
   )
 })
 
-export default function MessageList({ readonlyMessages }: Props = {}) {
-  const tab = useStore((s) => s.tabs.tabs.find((t) => t.id === s.tabs.activeTabId))
+export default function MessageList({ tabId, readonlyMessages }: Props = {}) {
+  const tab = useStore((s) => (tabId ? s.tabs.tabs.find((t) => t.id === tabId) : undefined))
+  const isActivePane = useStore((s) => s.tabs.activeTabId === tabId)
   const messages = readonlyMessages ?? tab?.messages ?? []
   const streamingContent = readonlyMessages ? '' : (tab?.currentStreamingContent ?? '')
   const isThinking = !readonlyMessages && tab?.status === 'thinking' && !streamingContent
   const isBooting = !readonlyMessages && tab?.status === 'booting'
-  const scrollRef = useAutoScroll<HTMLDivElement>(messages.length + streamingContent.length)
+  // Include pane activation in the trigger: a pane revealed from display:none
+  // has no layout while hidden, so it re-scrolls to the bottom on reveal.
+  const scrollRef = useAutoScroll<HTMLDivElement>(
+    messages.length + streamingContent.length + (isActivePane ? 1 : 0)
+  )
 
   return (
     <div ref={scrollRef} data-testid="message-list" className="flex-1 overflow-y-auto py-1">

@@ -1,6 +1,5 @@
 // src/renderer/src/components/chat/ChatPane.tsx
 import { useStore } from '@/store'
-import { useActiveTab } from '@/hooks/useActiveTab'
 import Toolbar from './Toolbar'
 import MessageList from './MessageList'
 import InputArea from './InputArea'
@@ -72,9 +71,10 @@ function ReadonlyErrorState({ tabId }: { tabId: string }) {
 }
 
 export default function ChatPane() {
-  const tab = useActiveTab()
+  const tabs = useStore((s) => s.tabs.tabs)
+  const activeTabId = useStore((s) => s.tabs.activeTabId)
 
-  if (!tab) {
+  if (tabs.length === 0) {
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         <EmptyState />
@@ -82,43 +82,36 @@ export default function ChatPane() {
     )
   }
 
-  if (tab.mode === 'loading') {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Toolbar />
-        <ReadonlyLoadingState />
-      </div>
-    )
-  }
-
-  if (tab.mode === 'error') {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Toolbar />
-        <ReadonlyErrorState tabId={tab.id} />
-      </div>
-    )
-  }
-
-  if (tab.mode === 'readonly') {
-    return (
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Toolbar />
-        <MessageList readonlyMessages={tab.messages} />
-        <ResumeBar tabId={tab.id} />
-      </div>
-    )
-  }
-
-  // mode === 'active'
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <Toolbar />
-      {/* Keyed per tab: draft text, slash-menu state and scroll position
-          must not leak across sessions sharing one component instance. */}
-      <MessageList key={tab.id} />
-      <ExtensionWidgets key={`widgets-${tab.id}`} />
-      <InputArea key={tab.id} />
+      {/* Keep every tab mounted; inactive panes are hidden with display:none.
+          Switching tabs no longer remounts MessageList/InputArea, so markdown
+          parsing, drafts, slash-menu state and scroll positions survive tab
+          switches. Per-pane keys keep tab state isolated (no cross-tab leaks). */}
+      {tabs.map((t) => (
+        <div
+          key={t.id}
+          data-testid={`chat-pane-${t.id}`}
+          className={t.id === activeTabId ? 'flex min-h-0 flex-1 flex-col' : 'hidden'}
+        >
+          {t.mode === 'loading' && <ReadonlyLoadingState />}
+          {t.mode === 'error' && <ReadonlyErrorState tabId={t.id} />}
+          {t.mode === 'readonly' && (
+            <>
+              <MessageList tabId={t.id} readonlyMessages={t.messages} />
+              <ResumeBar tabId={t.id} />
+            </>
+          )}
+          {t.mode === 'active' && (
+            <>
+              <MessageList tabId={t.id} />
+              <ExtensionWidgets tabId={t.id} />
+              <InputArea tabId={t.id} />
+            </>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
