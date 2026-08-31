@@ -29,10 +29,10 @@ export default function FileChips({ files, onRemove }: Props) {
           title={f.error ?? f.path}
         >
           <span className="max-w-[180px] truncate">{f.name}</span>
-          {f.error && <span className="ml-1 opacity-70 text-[10px]">({f.error})</span>}
+          {f.error && <span className="ms-1 opacity-70 text-[10px]">({f.error})</span>}
           <button
             onClick={() => onRemove(f.id)}
-            className="ml-0.5 text-zinc-600 hover:text-zinc-300"
+            className="ms-0.5 text-zinc-600 hover:text-zinc-300"
             aria-label={`Remove ${f.name}`}
           >
             ×

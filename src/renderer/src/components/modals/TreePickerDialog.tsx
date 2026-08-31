@@ -62,10 +62,10 @@ export default function TreePickerDialog() {
                 <button
                   disabled={busy}
                   onClick={() => void handleFork(node.id)}
-                  className="block w-full truncate rounded px-2 py-1 text-left text-xs text-zinc-200 transition-colors hover:bg-zinc-800"
+                  className="block w-full truncate rounded px-2 py-1 text-start text-xs text-zinc-200 transition-colors hover:bg-zinc-800"
                   title={node.text}
                 >
-                  <span className="mr-1 text-[10px] text-amber-500/80">⑂</span>
+                  <span className="me-1 text-[10px] text-amber-500/80">⑂</span>
                   {node.text || '(empty message)'}
                 </button>
               ) : (

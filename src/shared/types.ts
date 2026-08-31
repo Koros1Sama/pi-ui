@@ -17,6 +17,8 @@ export interface ProviderStatus {
   configured: boolean
 }
 
+export type UiDirection = 'auto' | 'ltr' | 'rtl'
+
 export interface AppConfig {
   providers: ProviderStatus[]
   defaultModel: string | null
@@ -27,6 +29,8 @@ export interface AppConfig {
   defaultWorkingDirectory: string | null
   /** "provider/modelId" entries; Ctrl+P cycles these when non-empty */
   favoriteModels: string[]
+  /** UI layout direction; 'auto' detects from the OS locale */
+  uiDirection?: UiDirection
 }
 
 export interface AppDefaults {
@@ -36,10 +40,38 @@ export interface AppDefaults {
   systemPrompt: string
   defaultWorkingDirectory: string | null
   favoriteModels: string[]
+  uiDirection?: UiDirection
 }
 
 export interface Preferences {
   lastUsedDirectory: string | null
+}
+
+// ── Content search (Everything-style project file search) ────────────────────
+
+export interface ContentSearchMatch {
+  /** Absolute file path */
+  path: string
+  /** Path relative to the search root, forward slashes */
+  relPath: string
+  /** 1-based line number */
+  line: number
+  /** 0-based column of the first matched term */
+  column: number
+  /** The matched line (trimmed to ~300 chars) */
+  lineText: string
+  /** The first include term that matched (for highlighting) */
+  term: string
+}
+
+export interface ContentSearchResult {
+  matches: ContentSearchMatch[]
+  /** True when the match/file/time cap stopped the search early */
+  truncated: boolean
+  /** Number of files scanned */
+  fileCount: number
+  matchCount: number
+  durationMs: number
 }
 
 export interface Message {
@@ -234,6 +266,10 @@ export interface PiAPI {
   }
   shell: {
     openPath(path: string): Promise<void>
+  }
+  search: {
+    /** Everything-style content search across a project directory */
+    content(req: { cwd: string; query: string; maxMatches?: number }): Promise<ContentSearchResult>
   }
   sessions: {
     list(): Promise<SessionSummary[]>

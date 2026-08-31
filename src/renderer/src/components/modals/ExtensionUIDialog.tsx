@@ -76,7 +76,7 @@ function DialogBody({
             <button
               key={opt}
               onClick={() => void answer({ value: opt })}
-              className="block w-full rounded px-3 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-800"
+              className="block w-full rounded px-3 py-1.5 text-start text-xs text-zinc-300 hover:bg-zinc-800"
             >
               {opt}
             </button>

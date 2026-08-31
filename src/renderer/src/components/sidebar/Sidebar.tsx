@@ -9,7 +9,7 @@ export default function Sidebar() {
   return (
     <aside
       data-testid="sidebar"
-      className="flex h-full w-56 shrink-0 flex-col overflow-hidden border-r border-[var(--pi-border-subtle)] bg-[var(--pi-sidebar-bg)]"
+      className="flex h-full w-56 shrink-0 flex-col overflow-hidden border-e border-[var(--pi-border-subtle)] bg-[var(--pi-sidebar-bg)]"
     >
       <div
         className="border-b border-[var(--pi-border-subtle)] px-3 pb-3 pt-7"
@@ -27,7 +27,7 @@ export default function Sidebar() {
         >
           <Settings size={13} />
           Settings
-          <span className="ml-auto text-zinc-700">⌘,</span>
+          <span className="ms-auto text-zinc-700">⌘,</span>
         </button>
       </div>
     </aside>

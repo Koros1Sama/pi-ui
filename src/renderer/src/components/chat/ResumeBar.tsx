@@ -74,7 +74,14 @@ export default function ResumeBar({ tabId }: Props) {
           disabled={loading}
           className="rounded-md bg-[var(--pi-tool-success-bg)] px-3 py-1.5 text-xs text-[var(--pi-accent)] transition-colors hover:bg-emerald-900 disabled:opacity-50"
         >
-          {loading ? 'Resuming…' : 'Resume →'}
+          {loading ? (
+            'Resuming…'
+          ) : (
+            <>
+              {'Resume '}
+              <span className="inline-block rtl:rotate-180">→</span>
+            </>
+          )}
         </button>
       </div>
     </div>

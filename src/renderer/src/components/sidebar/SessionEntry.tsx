@@ -104,7 +104,7 @@ export default function SessionEntry({
                 closeContextMenu()
                 setRenaming(true)
               }}
-              className="block w-full px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800"
+              className="block w-full px-3 py-1.5 text-start text-zinc-300 hover:bg-zinc-800"
             >
               Rename
             </button>
@@ -114,7 +114,7 @@ export default function SessionEntry({
                 closeContextMenu()
                 onTogglePin()
               }}
-              className="block w-full px-3 py-1.5 text-left text-zinc-300 hover:bg-zinc-800"
+              className="block w-full px-3 py-1.5 text-start text-zinc-300 hover:bg-zinc-800"
             >
               {session.pinned ? 'Unpin' : 'Pin'}
             </button>
@@ -125,7 +125,7 @@ export default function SessionEntry({
                 closeContextMenu()
                 onDelete()
               }}
-              className="block w-full px-3 py-1.5 text-left text-red-400 hover:bg-zinc-800"
+              className="block w-full px-3 py-1.5 text-start text-red-400 hover:bg-zinc-800"
             >
               Delete
             </button>

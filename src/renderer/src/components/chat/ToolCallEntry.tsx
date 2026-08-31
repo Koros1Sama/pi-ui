@@ -60,7 +60,7 @@ function TruncationBadge({ call }: { call: ToolCall }) {
       ⚠ {label}
       {call.details?.fullOutputPath && (
         <span
-          className="ml-2 cursor-pointer underline"
+          className="ms-2 cursor-pointer underline"
           style={{ color: 'var(--pi-accent)' }}
           onClick={() => window.pi.shell.openPath(call.details!.fullOutputPath!)}
         >
@@ -98,6 +98,7 @@ function BashOutput({ call, expanded }: { call: ToolCall; expanded: boolean }) {
         </div>
       )}
       <pre
+        dir="ltr"
         className="overflow-x-auto whitespace-pre-wrap"
         style={{
           color: 'var(--pi-dim)',
@@ -180,7 +181,7 @@ function ReadOutput({ call, expanded }: { call: ToolCall; expanded: boolean }) {
       {visible.map((line, i) => (
         <div key={i} className="flex whitespace-pre">
           <span
-            className="mr-3 inline-block w-8 select-none text-right"
+            className="me-3 inline-block w-8 select-none text-end"
             style={{ color: 'var(--pi-dim-dark, #555)' }}
           >
             {startLine + i}
@@ -284,7 +285,7 @@ function ToolCallEntryInner({ call }: Props) {
         )}
         {displayPath && (
           <span
-            className="flex-1 truncate text-left"
+            className="flex-1 truncate text-start"
             style={{
               color: isBash ? 'var(--pi-text)' : 'var(--pi-accent)',
             }}
@@ -292,7 +293,7 @@ function ToolCallEntryInner({ call }: Props) {
             {displayPath}
           </span>
         )}
-        <span className="ml-auto shrink-0 tabular-nums" style={{ color: getStatusColor(call) }}>
+        <span className="ms-auto shrink-0 tabular-nums" style={{ color: getStatusColor(call) }}>
           {getStatusText(call)}
         </span>
       </div>

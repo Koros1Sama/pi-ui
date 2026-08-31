@@ -57,7 +57,7 @@ export default function Toolbar() {
         className="flex items-center gap-3 border-b border-[var(--pi-border-subtle)] bg-[var(--pi-sidebar-bg)] px-3 py-2"
       >
         <span className="text-xs text-zinc-500">{tab.model || '—'}</span>
-        <span className="ml-auto max-w-[200px] truncate text-xs text-zinc-600">{tab.cwd}</span>
+        <span className="ms-auto max-w-[200px] truncate text-xs text-zinc-600">{tab.cwd}</span>
       </div>
     )
   }
@@ -124,7 +124,7 @@ export default function Toolbar() {
 
       <button
         onClick={() => tab.cwd && window.pi.shell.openPath(tab.cwd)}
-        className="ml-auto max-w-[200px] truncate text-zinc-600 transition-colors hover:text-zinc-400"
+        className="ms-auto max-w-[200px] truncate text-zinc-600 transition-colors hover:text-zinc-400"
       >
         {tab.cwd}
       </button>

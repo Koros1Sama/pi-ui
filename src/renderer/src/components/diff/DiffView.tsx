@@ -118,7 +118,11 @@ export default function DiffView({ unifiedDiff, comments, onAddComment, onRemove
   }
 
   return (
-    <div className="flex-1 overflow-y-auto font-mono text-xs leading-5" data-testid="diff-view">
+    <div
+      dir="ltr"
+      className="flex-1 overflow-y-auto font-mono text-xs leading-5"
+      data-testid="diff-view"
+    >
       {lines.map((line, i) => {
         const commentable = isCommentable(line)
         const lineComments = commentsByLine.get(i) ?? []
@@ -133,13 +137,13 @@ export default function DiffView({ unifiedDiff, comments, onAddComment, onRemove
             >
               {/* Line numbers */}
               <span
-                className="w-9 shrink-0 select-none px-1 text-right tabular-nums"
+                className="w-9 shrink-0 select-none px-1 text-end tabular-nums"
                 style={{ color: 'var(--pi-dim-dark)' }}
               >
                 {line.lineNumBefore ?? ''}
               </span>
               <span
-                className="w-9 shrink-0 select-none px-1 text-right tabular-nums"
+                className="w-9 shrink-0 select-none px-1 text-end tabular-nums"
                 style={{ color: 'var(--pi-dim-dark)' }}
               >
                 {line.lineNumAfter ?? ''}
@@ -155,7 +159,7 @@ export default function DiffView({ unifiedDiff, comments, onAddComment, onRemove
 
               {/* Content */}
               <span
-                className="flex-1 whitespace-pre-wrap break-all pr-1"
+                className="flex-1 whitespace-pre-wrap break-all pe-1"
                 style={{ color: lineColor(line.type) }}
               >
                 {line.content}

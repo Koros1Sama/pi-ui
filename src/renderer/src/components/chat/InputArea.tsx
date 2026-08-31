@@ -372,10 +372,10 @@ export default function InputArea({ tabId }: { tabId: string }) {
                     ? 'Drop file to attach…'
                     : 'Send a message… (Enter to send, Shift+Enter for newline)'
             }
-            className="w-full resize-none bg-transparent px-3 py-2.5 pr-16 text-zinc-300 placeholder-zinc-600 outline-none"
+            className="w-full resize-none bg-transparent px-3 py-2.5 pe-16 text-zinc-300 placeholder-zinc-600 outline-none"
             style={{ minHeight: 40, maxHeight: 160 }}
           />
-          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
             {!thinking && (
               <button
                 data-testid="attach-btn"
@@ -468,6 +468,7 @@ export default function InputArea({ tabId }: { tabId: string }) {
             <>
               <span style={{ color: 'var(--pi-dim-dark)' }}>·</span>
               <button
+                dir="ltr"
                 onClick={() => window.pi.shell.openPath(tab.cwd!)}
                 className="truncate hover:underline"
                 style={{ color: 'var(--pi-dim)', maxWidth: '200px' }}

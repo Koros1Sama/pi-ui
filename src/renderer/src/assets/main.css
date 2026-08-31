@@ -138,6 +138,9 @@ body {
   color: var(--pi-accent);
   padding: 0.1em 0.35em;
   border-radius: 3px;
+  /* Code is always LTR — isolated so it never scrambles inside RTL prose */
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 .pi-markdown pre {
@@ -147,6 +150,8 @@ body {
   padding: 0.75rem 1rem;
   overflow-x: auto;
   margin: 0.5rem 0;
+  direction: ltr;
+  text-align: left;
 }
 
 .pi-markdown pre code {
@@ -158,7 +163,7 @@ body {
 }
 
 .pi-markdown blockquote {
-  border-left: 3px solid var(--pi-dim);
+  border-inline-start: 3px solid var(--pi-dim);
   margin: 0.5rem 0;
   padding: 0 0.75rem;
   color: var(--pi-dim);

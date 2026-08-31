@@ -42,7 +42,7 @@ export default function DiffPane() {
   return (
     <div
       data-testid="diff-pane"
-      className="flex w-[460px] shrink-0 flex-col border-l border-[var(--pi-border-subtle)] bg-[var(--pi-sidebar-bg)]"
+      className="flex w-[460px] shrink-0 flex-col border-s border-[var(--pi-border-subtle)] bg-[var(--pi-sidebar-bg)]"
     >
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-[var(--pi-border-subtle)] px-3 py-2">
@@ -81,7 +81,7 @@ export default function DiffPane() {
         >
           Send review to pi
           {tab.diffComments.length > 0 && (
-            <span className="ml-1.5 rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">
+            <span className="ms-1.5 rounded-full bg-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400">
               {tab.diffComments.length}
             </span>
           )}

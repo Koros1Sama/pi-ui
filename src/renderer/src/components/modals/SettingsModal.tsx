@@ -13,9 +13,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import type { AppThinkingLevel } from '@shared/types'
+import type { AppThinkingLevel, UiDirection } from '@shared/types'
 
 const THINKING_LEVELS: AppThinkingLevel[] = ['off', 'low', 'high']
+const DIRECTION_OPTIONS: { value: UiDirection; label: string; hint: string }[] = [
+  { value: 'auto', label: 'Auto', hint: 'Follows OS locale' },
+  { value: 'ltr', label: 'LTR', hint: 'Left to right' },
+  { value: 'rtl', label: 'RTL', hint: 'Right to left' },
+]
 
 export default function SettingsModal() {
   const ui = useStore((s) => s.ui)
@@ -36,6 +41,7 @@ export default function SettingsModal() {
       : ''
   )
   const [favorites, setFavorites] = useState<string[]>(config.favoriteModels ?? [])
+  const [direction, setDirection] = useState<UiDirection>(config.uiDirection ?? 'auto')
 
   // Mounted at app boot — local state captured the EMPTY config before
   // config:get() resolved (saving would silently wipe stored settings).
@@ -53,6 +59,7 @@ export default function SettingsModal() {
           : ''
       )
       setFavorites(config.favoriteModels ?? [])
+      setDirection(config.uiDirection ?? 'auto')
       setApiKeys({})
     }
   }
@@ -91,6 +98,7 @@ export default function SettingsModal() {
       defaultModel: m || null,
       defaultProvider: p || null,
       defaultWorkingDirectory: defaultWorkingDirectory || null,
+      uiDirection: direction,
     })
     setConfig({
       ...config,
@@ -99,6 +107,7 @@ export default function SettingsModal() {
       defaultModel: m || null,
       defaultProvider: p || null,
       defaultWorkingDirectory: defaultWorkingDirectory || null,
+      uiDirection: direction,
     })
     closeSettings()
   }
@@ -117,15 +126,7 @@ export default function SettingsModal() {
           <DialogTitle className="text-sm font-semibold">Settings</DialogTitle>
         </DialogHeader>
 
-        <Button
-          aria-label="Close"
-          variant="ghost"
-          size="sm"
-          onClick={closeSettings}
-          className="absolute right-4 top-4 text-zinc-500 hover:text-zinc-300"
-        >
-          ✕
-        </Button>
+        {/* Close button: provided by DialogContent itself (no second ✕). */}
 
         {oauthProviders.length > 0 && (
           <div className="border-t border-zinc-900 pt-4">
@@ -250,17 +251,43 @@ export default function SettingsModal() {
                     key={key}
                     data-testid={`favorite-${key}`}
                     onClick={() => void toggleFavorite(key)}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs transition-colors hover:bg-zinc-800"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-start text-xs transition-colors hover:bg-zinc-800"
                   >
                     <span className={active ? 'text-amber-400' : 'text-zinc-600'}>
                       {active ? '★' : '☆'}
                     </span>
                     <span className="truncate text-zinc-300">{m.displayName}</span>
-                    <span className="ml-auto shrink-0 text-[10px] text-zinc-600">{m.provider}</span>
+                    <span className="ms-auto shrink-0 text-[10px] text-zinc-600">{m.provider}</span>
                   </button>
                 )
               })}
             </div>
+          </div>
+          <div className="mb-3">
+            <label className="mb-1.5 block text-[10px] uppercase tracking-widest text-zinc-600">
+              Interface Direction
+            </label>
+            <div className="flex overflow-hidden rounded border border-zinc-800">
+              {DIRECTION_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  data-testid={`direction-${opt.value}`}
+                  title={opt.hint}
+                  onClick={() => setDirection(opt.value)}
+                  className={cn(
+                    'flex-1 py-1.5 text-xs',
+                    direction === opt.value
+                      ? 'bg-emerald-950 text-emerald-400'
+                      : 'text-zinc-500 hover:text-zinc-300'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-600">
+              Auto follows your system language (Arabic/Hebrew/Farsi → RTL).
+            </p>
           </div>
           <div className="mb-3">
             <label className="mb-1.5 block text-[10px] uppercase tracking-widest text-zinc-600">

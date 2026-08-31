@@ -27,6 +27,7 @@ if (process.env['PI_E2E']) {
     homedir: '/Users/test',
     defaultWorkingDirectory: null,
     favoriteModels: [],
+    uiDirection: 'auto',
   }
 
   const DEFAULT_MODELS: ModelEntry[] = [
@@ -150,6 +151,30 @@ if (process.env['PI_E2E']) {
     shell: {
       openPath: async () => {},
     },
+    search: {
+      content: async ({ cwd, query }: { cwd: string; query: string }) => {
+        // Mock content search: canned result shaped like the real service.
+        if (!query.trim()) {
+          return { matches: [], truncated: false, fileCount: 0, matchCount: 0, durationMs: 0 }
+        }
+        return {
+          matches: [
+            {
+              path: `${cwd}/src/example.ts`,
+              relPath: 'src/example.ts',
+              line: 3,
+              column: 8,
+              lineText: `export const hello = 'world' // matches: ${query}`,
+              term: query.split(/\s+/)[0] ?? query,
+            },
+          ],
+          truncated: false,
+          fileCount: 4,
+          matchCount: 1,
+          durationMs: 12,
+        }
+      },
+    },
     sessions: {
       list: async () => MOCK_SESSIONS,
       updateMeta: async () => {},
@@ -254,6 +279,9 @@ if (process.env['PI_E2E']) {
     },
     shell: {
       openPath: (path) => ipcRenderer.invoke('shell:openPath', { path }),
+    },
+    search: {
+      content: (req) => ipcRenderer.invoke('search:content', req),
     },
     sessions: {
       list: () => ipcRenderer.invoke('sessions:list'),

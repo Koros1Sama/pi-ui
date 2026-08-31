@@ -45,6 +45,7 @@ describe('SettingsService', () => {
         systemPrompt: 'Be concise.',
         defaultWorkingDirectory: null,
         favoriteModels: [],
+        uiDirection: 'auto',
       })
     })
 
@@ -60,7 +61,16 @@ describe('SettingsService', () => {
         systemPrompt: '',
         defaultWorkingDirectory: null,
         favoriteModels: [],
+        uiDirection: 'auto',
       })
+    })
+
+    it('reads persisted interface direction', async () => {
+      mockReadFile.mockResolvedValue(JSON.stringify({ piUIInterfaceDirection: 'rtl' }))
+
+      const defaults = await service.getDefaults()
+
+      expect(defaults.uiDirection).toBe('rtl')
     })
   })
 

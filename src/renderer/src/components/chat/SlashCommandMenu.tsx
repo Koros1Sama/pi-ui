@@ -41,7 +41,7 @@ export default function SlashCommandMenu({
 
   if (commands.length === 0) {
     return (
-      <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-zinc-800 bg-zinc-900 py-2 shadow-lg">
+      <div className="absolute bottom-full start-0 end-0 mb-1 rounded-lg border border-zinc-800 bg-zinc-900 py-2 shadow-lg">
         <p className="px-3 py-1 text-xs text-zinc-600">No commands match</p>
       </div>
     )
@@ -58,7 +58,7 @@ export default function SlashCommandMenu({
     <div
       role="listbox"
       data-testid="slash-command-menu"
-      className="absolute bottom-full left-0 right-0 mb-1 max-h-56 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900 py-1 shadow-lg"
+      className="absolute bottom-full start-0 end-0 mb-1 max-h-56 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-900 py-1 shadow-lg"
     >
       {commands.map((cmd, i) => (
         <div
@@ -84,7 +84,7 @@ export default function SlashCommandMenu({
             <span className="shrink-0 font-mono text-[10px] text-amber-500/80">{args}</span>
           )}
           {cmd.description && (
-            <span className="ml-auto truncate text-zinc-600">{cmd.description}</span>
+            <span className="ms-auto truncate text-zinc-600">{cmd.description}</span>
           )}
         </div>
       ))}
@@ -102,7 +102,7 @@ export default function SlashCommandMenu({
             >
               <span className="text-[10px] text-amber-500/80">↳</span>
               <span className="font-mono text-zinc-300">{choice}</span>
-              <span className="ml-auto text-[10px] text-zinc-600">click to run</span>
+              <span className="ms-auto text-[10px] text-zinc-600">click to run</span>
             </div>
           ))}
         </div>

@@ -210,7 +210,7 @@ export default function NewSessionDialog() {
         </div>
 
         <div className="flex justify-end gap-2 pt-1">
-          {error && <p className="mr-auto self-center text-xs text-red-400">{error}</p>}
+          {error && <p className="me-auto self-center text-xs text-red-400">{error}</p>}
           <Button
             data-testid="cancel-session-btn"
             aria-label="Cancel"
@@ -227,7 +227,14 @@ export default function NewSessionDialog() {
             disabled={loading || !cwd || !effectiveModel}
             className="bg-emerald-950 text-xs text-emerald-400 hover:bg-emerald-900"
           >
-            {loading ? 'Starting…' : 'Start Session →'}
+            {loading ? (
+              'Starting…'
+            ) : (
+              <>
+                {'Start Session '}
+                <span className="inline-block rtl:rotate-180">→</span>
+              </>
+            )}
           </Button>
         </div>
       </DialogContent>

@@ -1,5 +1,5 @@
 // src/renderer/src/store/config-slice.ts
-import type { AppConfig, ModelEntry } from '@shared/types'
+import type { AppConfig, ModelEntry, UiDirection } from '@shared/types'
 
 export interface ConfigState {
   providers: AppConfig['providers']
@@ -9,6 +9,7 @@ export interface ConfigState {
   systemPrompt: string
   defaultWorkingDirectory: string | null
   favoriteModels: string[]
+  uiDirection?: UiDirection
   homedir: string
   models: ModelEntry[]
 }

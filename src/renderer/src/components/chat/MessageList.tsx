@@ -31,6 +31,7 @@ const UserMessage = memo(function UserMessage({ msg }: { msg: Message }) {
   return (
     <div
       data-testid="user-message"
+      dir="auto"
       className="mx-3 my-1 rounded px-3 py-2"
       style={{ backgroundColor: 'var(--pi-user-msg-bg)' }}
     >
@@ -47,11 +48,11 @@ const AssistantMessage = memo(function AssistantMessage({
   streaming?: boolean
 }) {
   return (
-    <div data-testid="assistant-message" className="mx-3 py-1.5">
+    <div data-testid="assistant-message" dir="auto" className="mx-3 py-1.5">
       <PiMarkdown>{content}</PiMarkdown>
       {streaming && (
         <span
-          className="ml-0.5 inline-block h-3 w-0.5 animate-pulse align-middle"
+          className="ms-0.5 inline-block h-3 w-0.5 animate-pulse align-middle"
           style={{ backgroundColor: 'var(--pi-accent)' }}
         />
       )}
@@ -108,7 +109,7 @@ export default function MessageList({ tabId, readonlyMessages }: Props = {}) {
             style={{ backgroundColor: 'var(--pi-accent)' }}
           />
           {isBooting && (
-            <span className="ml-2 text-[11px]" style={{ color: 'var(--pi-dim)' }}>
+            <span className="ms-2 text-[11px]" style={{ color: 'var(--pi-dim)' }}>
               Starting pi… first prompt can take ~30–60s
             </span>
           )}

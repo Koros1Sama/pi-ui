@@ -18,7 +18,7 @@ export default function Toast() {
   return (
     <div
       data-testid="extension-toast"
-      className={`fixed bottom-4 left-1/2 z-[60] -translate-x-1/2 cursor-pointer rounded-lg border px-4 py-2 text-xs shadow-lg ${
+      className={`fixed bottom-4 start-1/2 z-[60] -translate-x-1/2 cursor-pointer rounded-lg border px-4 py-2 text-xs shadow-lg ${
         toast.level === 'error'
           ? 'border-red-900 bg-red-950/90 text-red-300'
           : toast.level === 'warning'

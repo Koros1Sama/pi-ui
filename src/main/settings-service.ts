@@ -2,7 +2,7 @@
 import { readFile, writeFile, mkdir } from 'fs/promises'
 import { homedir } from 'os'
 import { join, dirname } from 'path'
-import type { AppDefaults, AppThinkingLevel } from '@shared/types'
+import type { AppDefaults, AppThinkingLevel, UiDirection } from '@shared/types'
 
 interface SettingsJson {
   defaultProvider?: string | null
@@ -12,6 +12,8 @@ interface SettingsJson {
   defaultWorkingDirectory?: string | null
   /** pi-ui: "provider/modelId" entries cycled by Ctrl+P */
   piUIFavoriteModels?: string[]
+  /** pi-ui: 'auto' | 'ltr' | 'rtl' */
+  piUIInterfaceDirection?: UiDirection
   [key: string]: unknown
 }
 
@@ -28,6 +30,7 @@ export class SettingsService {
       systemPrompt: settings.defaultSystemPrompt ?? '',
       defaultWorkingDirectory: settings.defaultWorkingDirectory ?? null,
       favoriteModels: Array.isArray(settings.piUIFavoriteModels) ? settings.piUIFavoriteModels : [],
+      uiDirection: settings.piUIInterfaceDirection ?? 'auto',
     }
   }
 
@@ -41,6 +44,7 @@ export class SettingsService {
     if (patch.defaultWorkingDirectory !== undefined)
       settings.defaultWorkingDirectory = patch.defaultWorkingDirectory
     if (patch.favoriteModels !== undefined) settings.piUIFavoriteModels = patch.favoriteModels
+    if (patch.uiDirection !== undefined) settings.piUIInterfaceDirection = patch.uiDirection
     await mkdir(dirname(SETTINGS_PATH), { recursive: true })
     await writeFile(SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8')
   }
