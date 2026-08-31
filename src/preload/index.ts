@@ -100,7 +100,14 @@ if (process.env['PI_E2E']) {
 
   const mockApi: PiAPI = {
     session: {
-      create: async () => ({ sessionId: `test-session-${++sessionCounter}` }),
+      create: async () => {
+        const sessionId = `test-session-${++sessionCounter}`
+        // Mirror the real session-service: the session becomes usable a tick
+        // after creation. Deferred so NewSessionDialog registers the tab
+        // (booting) before the event fires — booting → idle then resolves.
+        setTimeout(() => emit('pi:session-ready', { sessionId, sdkSessionId: null }), 0)
+        return { sessionId }
+      },
       send: async () => {},
       steer: async () => {},
       listCommands: async () => [],

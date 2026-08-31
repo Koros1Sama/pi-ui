@@ -12,10 +12,14 @@ test('stop button is visible while pi is thinking', async ({ page }) => {
   await expect(chat.stopBtn(page)).toBeVisible()
 })
 
-test('input is disabled while pi is thinking', async ({ page }) => {
+test('input stays enabled for steering while pi is thinking', async ({ page }) => {
   await chat.input(page).fill('Do something long')
   await chat.sendBtn(page).click()
-  await expect(chat.input(page)).toBeDisabled()
+
+  // Steering by design: the input stays enabled while thinking so the user
+  // can queue a follow-up message (mirrors pi TUI behavior).
+  await expect(chat.input(page)).toBeEnabled()
+  await expect(chat.input(page)).toHaveAttribute('placeholder', /steer the agent/i)
 })
 
 test('clicking stop calls abort and returns to idle', async ({ page }) => {
