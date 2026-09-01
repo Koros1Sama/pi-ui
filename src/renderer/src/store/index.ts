@@ -49,7 +49,7 @@ export const useStore = create<AppStore>()(
 // the factory shape matches the combined store's initial state.
 ;(useStore as unknown as { getInitialState: () => typeof initialState }).getInitialState = () => ({
   ...initialState,
-  tabs: { tabs: [], activeTabId: null, mru: [] },
+  tabs: { tabs: [], activeTabId: null, mru: [], previewTabId: null },
   config: { ...initialConfigState, providers: [], models: [] },
   ui: { ...initialUiState },
   history: { ...initialHistoryState },

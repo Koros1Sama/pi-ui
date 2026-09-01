@@ -1,5 +1,6 @@
 // src/renderer/src/components/tabs/Tab.tsx
 import { cn } from '@/lib/utils'
+import { useStore } from '@/store'
 import type { Tab } from '@/store/tabs-slice'
 
 interface Props {
@@ -31,6 +32,7 @@ function StatusDot({ status, mode }: { status: Tab['status']; mode: Tab['mode'] 
 }
 
 export default function TabItem({ tab, isActive, onActivate, onClose }: Props) {
+  const previewed = useStore((s) => s.tabs.previewTabId === tab.id)
   // Windows paths use backslashes — split on both separators, show the tail.
   const label = tab.cwd ? (tab.cwd.split(/[\\/]/).filter(Boolean).pop() ?? tab.cwd) : 'New session'
 
@@ -38,13 +40,15 @@ export default function TabItem({ tab, isActive, onActivate, onClose }: Props) {
     <div
       data-testid={`tab-${tab.id}`}
       data-tab-item="true"
+      data-previewed={previewed ? 'true' : undefined}
       title={tab.cwd ?? 'New session'}
       onClick={onActivate}
       className={cn(
         'group flex max-w-[220px] cursor-pointer items-center gap-1.5 border-e border-[var(--pi-border-subtle)] px-3 py-2 text-xs transition-colors',
         isActive
           ? 'bg-[var(--pi-bg)] text-zinc-200'
-          : 'bg-[var(--pi-sidebar-bg)] text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300'
+          : 'bg-[var(--pi-sidebar-bg)] text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300',
+        previewed && 'ring-1 ring-inset ring-[var(--pi-accent)] text-zinc-200'
       )}
     >
       <StatusDot status={tab.status} mode={tab.mode} />
