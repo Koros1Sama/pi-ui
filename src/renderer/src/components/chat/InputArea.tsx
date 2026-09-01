@@ -174,6 +174,10 @@ export default function InputArea({ tabId }: { tabId: string }) {
         await window.pi.session.steer(tab.sessionId, msg)
       } catch (err) {
         console.error('[steer]', err)
+        useStore.getState().setToast({
+          message: `Steer failed: ${err instanceof Error ? err.message : String(err)}`,
+          level: 'error',
+        })
       }
     } else {
       // idle / booting / error — prompt (pi buffers until the process is ready)
@@ -183,6 +187,10 @@ export default function InputArea({ tabId }: { tabId: string }) {
         await window.pi.session.send(tab.sessionId, msg)
       } catch (err) {
         console.error('[send]', err)
+        useStore.getState().setToast({
+          message: `Send failed: ${err instanceof Error ? err.message : String(err)}`,
+          level: 'error',
+        })
         setTabStatus(tab.id, 'error')
       }
     }
@@ -384,16 +392,16 @@ export default function InputArea({ tabId }: { tabId: string }) {
                     ? 'Drop file to attach…'
                     : 'Send a message… (Enter to send, Shift+Enter for newline)'
             }
-            className="w-full resize-none bg-transparent px-[72px] py-2.5 text-zinc-300 placeholder-zinc-600 outline-none"
+            className="w-full resize-none bg-transparent pl-3 pr-[60px] py-[11px] leading-[22px] text-zinc-300 placeholder-zinc-600 outline-none"
             style={{ minHeight: 44, maxHeight: 160 }}
           />
-          <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
             {!thinking && (
               <button
                 data-testid="attach-btn"
                 onClick={handlePaperclip}
                 title="Attach file"
-                className="flex h-7 w-7 items-center justify-center rounded text-zinc-600 hover:text-zinc-400"
+                className="flex h-6 w-6 items-center justify-center rounded text-zinc-600 hover:text-zinc-400"
               >
                 📎
               </button>
@@ -405,9 +413,9 @@ export default function InputArea({ tabId }: { tabId: string }) {
                 size="sm"
                 onClick={send}
                 disabled={!canSend}
-                className="h-7 w-7 justify-center border border-zinc-700 bg-zinc-800 p-0 text-zinc-400 hover:text-zinc-200"
+                className="h-6 w-6 justify-center border border-zinc-700 bg-zinc-800 p-0 text-zinc-400 hover:text-zinc-200"
               >
-                <ArrowUp size={14} />
+                <ArrowUp size={13} />
               </Button>
             )}
             {thinking && (
@@ -417,9 +425,9 @@ export default function InputArea({ tabId }: { tabId: string }) {
                 size="sm"
                 variant="ghost"
                 onClick={handleAbort}
-                className="h-7 w-7 justify-center border border-zinc-700 bg-zinc-800 p-0 text-zinc-500 hover:text-zinc-300"
+                className="h-6 w-6 justify-center border border-zinc-700 bg-zinc-800 p-0 text-zinc-500 hover:text-zinc-300"
               >
-                <Square size={10} />
+                <Square size={9} />
               </Button>
             )}
           </div>

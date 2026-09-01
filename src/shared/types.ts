@@ -208,6 +208,15 @@ export interface PiEventPayloads {
   'pi:status': { sessionId: string; statusKey: string; text: string | null }
   /** A user message actually entered the session transcript (steer delivery). */
   'pi:user-message': { sessionId: string; content: string; timestamp: number }
+  /** Auto-retry started after a transient provider error (overloaded/rate-limit/5xx). */
+  'pi:auto-retry': {
+    sessionId: string
+    attempt: number
+    maxAttempts: number
+    errorMessage: string
+  }
+  /** Auto-retry finished — success, or retries exhausted. */
+  'pi:auto-retry-end': { sessionId: string; success: boolean; attempt: number }
   /** Interactive session-tree picker (fork points from /tree). */
   'pi:tree-picker': { sessionId: string; nodes: TreePickerNode[] }
   'update:checking': Record<string, never>

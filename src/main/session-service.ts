@@ -160,6 +160,17 @@ export class SessionService {
       await entry.rpc.request({ type: 'prompt', message: text })
       return
     }
+    // Extension commands execute IMMEDIATELY even while streaming — steer
+    // rejects them ("use prompt instead"). Route known extension commands
+    // through a plain prompt so they keep working mid-run.
+    const slashName = /^\/([\w:-]+)/.exec(text.trim())?.[1]
+    if (
+      slashName &&
+      (entry.commandsCache ?? []).some((c) => c.name === slashName && c.source === 'extension')
+    ) {
+      await entry.rpc.request({ type: 'prompt', message: text })
+      return
+    }
     await entry.rpc.request({ type: 'steer', message: text })
   }
 
@@ -687,6 +698,21 @@ export class SessionService {
         entry.onEvent('pi:error', {
           sessionId,
           message: String(ev['error'] ?? 'extension error'),
+        })
+        break
+      case 'auto_retry_start':
+        entry.onEvent('pi:auto-retry', {
+          sessionId,
+          attempt: Number(ev['attempt'] ?? 1),
+          maxAttempts: Number(ev['maxAttempts'] ?? 1),
+          errorMessage: String(ev['errorMessage'] ?? ''),
+        })
+        break
+      case 'auto_retry_end':
+        entry.onEvent('pi:auto-retry-end', {
+          sessionId,
+          success: ev['success'] === true,
+          attempt: Number(ev['attempt'] ?? 0),
         })
         break
       default:

@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { memo } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
@@ -29,7 +29,9 @@ function PiMarkdown({ children }: { children: string }) {
 
 // memo'd: immer keeps untouched message objects referentially stable, so
 // past messages skip re-rendering (and markdown re-parsing) on every token.
-const UserMessage = memo(function UserMessage({ msg }: { msg: Message }) {
+const UserMessage = memo(function UserMessage({ msg, tabId }: { msg: Message; tabId?: string }) {
+  const removeUserMessage = useStore((s) => s.removeUserMessage)
+  const setToast = useStore((s) => s.setToast)
   return (
     <div
       data-testid="user-message"
@@ -46,6 +48,22 @@ const UserMessage = memo(function UserMessage({ msg }: { msg: Message }) {
         >
           <Loader2 size={10} className="animate-pulse" />
           <span>queued — enters the chat after the current tool calls</span>
+          <button
+            data-testid="queued-cancel-btn"
+            aria-label="Cancel queued message"
+            title="Cancel queued message"
+            onClick={() => {
+              if (!tabId) return
+              removeUserMessage(tabId, msg.id)
+              setToast({
+                message: 'Removed from view — pi may still deliver it if already queued',
+                level: 'info',
+              })
+            }}
+            className="ms-1 rounded p-0.5 text-zinc-600 hover:text-red-400"
+          >
+            <X size={10} />
+          </button>
         </div>
       )}
     </div>
@@ -90,7 +108,7 @@ export default function MessageList({ tabId, readonlyMessages }: Props = {}) {
       {messages.map((msg) => (
         <div key={msg.id} className="mb-1">
           {msg.role === 'user' ? (
-            <UserMessage msg={msg} />
+            <UserMessage msg={msg} tabId={tabId} />
           ) : (
             <AssistantMessage content={msg.content} />
           )}

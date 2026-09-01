@@ -30,6 +30,8 @@ export interface TabsState {
   /** Most-recently-used tab ids (front = current). Drives Ctrl+Tab MRU
    *  switching, Firefox/Alt+Tab style. */
   mru: string[]
+  /** Tab highlighted by an in-progress Ctrl+Tab walk — activated on keyup. */
+  previewTabId: string | null
 }
 
 /** Next tab when cycling MRU order (delta 1 = toward older, -1 = reverse). */
@@ -56,10 +58,14 @@ export interface TabsActions {
   createTab(tab: Tab): void
   closeTab(tabId: string): void
   setActiveTab(tabId: string): void
+  /** Highlight a tab during a Ctrl+Tab walk (activated on Control keyup). */
+  setTabPreview(tabId: string | null): void
   setTabStatus(tabId: string, status: Tab['status']): void
   setTabMode(tabId: string, mode: TabMode): void
   setTabMessages(tabId: string, messages: Message[]): void
   addUserMessage(tabId: string, content: string, pending?: boolean): void
+  /** Remove a message (e.g. user cancels a queued steer). */
+  removeUserMessage(tabId: string, messageId: string): void
   /** The session confirmed delivery of the oldest pending (steered) message. */
   confirmPendingUserMessage(tabId: string): void
   /** Flush all pending markers (activity resumed / turn settled). */
@@ -98,6 +104,7 @@ export const initialTabsState: TabsState = {
   tabs: [],
   activeTabId: null,
   mru: [],
+  previewTabId: null,
 }
 
 export const createTabsSlice = (
@@ -116,6 +123,7 @@ export const createTabsSlice = (
       if (idx === -1) return
       s.tabs.tabs.splice(idx, 1)
       s.tabs.mru = s.tabs.mru.filter((id) => id !== tabId)
+      if (s.tabs.previewTabId === tabId) s.tabs.previewTabId = null
       if (s.tabs.activeTabId === tabId) {
         const next = s.tabs.tabs[idx - 1] ?? s.tabs.tabs[idx] ?? null
         s.tabs.activeTabId = next?.id ?? null
@@ -128,6 +136,11 @@ export const createTabsSlice = (
       // Recency order only changes on USER-driven focus, not programmatic
       // tab bookkeeping — safe to record on every activation.
       s.tabs.mru = [tabId, ...s.tabs.mru.filter((id) => id !== tabId)]
+    }),
+
+  setTabPreview: (tabId) =>
+    set((s) => {
+      s.tabs.previewTabId = tabId
     }),
 
   setTabStatus: (tabId, status) =>
@@ -160,6 +173,13 @@ export const createTabsSlice = (
         createdAt: Date.now(),
         pending,
       })
+    }),
+
+  removeUserMessage: (tabId, messageId) =>
+    set((s) => {
+      const tab = s.tabs.tabs.find((t) => t.id === tabId)
+      if (!tab) return
+      tab.messages = tab.messages.filter((m) => m.id !== messageId)
     }),
 
   confirmPendingUserMessage: (tabId) =>

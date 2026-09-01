@@ -16,6 +16,7 @@ export function usePiEvents(): void {
   const setTabDiff = useStore((s) => s.setTabDiff)
   const confirmPendingUserMessage = useStore((s) => s.confirmPendingUserMessage)
   const clearPendingUserMessages = useStore((s) => s.clearPendingUserMessages)
+  const setToast = useStore((s) => s.setToast)
 
   useEffect(() => {
     function findTabId(sessionId: string): string | null {
@@ -112,7 +113,7 @@ export function usePiEvents(): void {
         clearPendingUserMessages(tabId)
       }),
 
-      window.pi.on('pi:error', ({ sessionId }) => {
+      window.pi.on('pi:error', ({ sessionId, message }) => {
         flushTokens()
         const tabId = findTabId(sessionId)
         if (!tabId) return
@@ -121,6 +122,27 @@ export function usePiEvents(): void {
         // next response after recovery).
         finalizeAssistantMessage(tabId)
         setTabStatus(tabId, 'error')
+        // The user must SEE what went wrong (extension error, provider
+        // failure...) — a red toast beats a silent console.error.
+        setToast({ message: String(message ?? 'error').slice(0, 300), level: 'error' })
+      }),
+
+      window.pi.on('pi:auto-retry', ({ attempt, maxAttempts, errorMessage }) => {
+        setToast({
+          message: `Retrying (${attempt}/${maxAttempts})… ${errorMessage.slice(0, 160)}`,
+          level: 'warning',
+        })
+      }),
+
+      window.pi.on('pi:auto-retry-end', ({ success, attempt }) => {
+        setToast(
+          success
+            ? { message: `Retry succeeded (attempt ${attempt})`, level: 'success' }
+            : {
+                message: `Retries exhausted after ${attempt} attempt(s) — check provider status / balance`,
+                level: 'error',
+              }
+        )
       }),
     ]
 
@@ -139,5 +161,6 @@ export function usePiEvents(): void {
     setTabDiff,
     confirmPendingUserMessage,
     clearPendingUserMessages,
+    setToast,
   ])
 }
