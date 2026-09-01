@@ -242,6 +242,74 @@ describe('SessionService (RPC engine)', () => {
       expect(prompt!['streamingBehavior']).toBeUndefined()
     })
 
+    it('intercepts TUI-only builtins with a GUI hint instead of prompting the LLM', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/new')
+      expect(lastRpc().written.some((c) => c['type'] === 'prompt')).toBe(false)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({ delta: expect.stringContaining('/new') })
+      )
+    })
+
+    it('routes /model with args through set_model and confirms', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/model zai/glm-5.3')
+      expect(
+        lastRpc().written.some(
+          (c) => c['type'] === 'set_model' && c['provider'] === 'zai' && c['modelId'] === 'glm-5.3'
+        )
+      ).toBe(true)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({ delta: expect.stringContaining('zai/glm-5.3') })
+      )
+    })
+
+    it('usage hint for /model without args', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/model')
+      expect(lastRpc().written.some((c) => c['type'] === 'set_model')).toBe(false)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({ delta: expect.stringContaining('Usage') })
+      )
+    })
+
+    it('routes /thinking through set_thinking_level', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/thinking high')
+      expect(
+        lastRpc().written.some((c) => c['type'] === 'set_thinking_level' && c['level'] === 'high')
+      ).toBe(true)
+    })
+
+    it('/help lists the desktop builtins', async () => {
+      const sessionId = await createSession()
+      await service.send(sessionId, '/help')
+      expect(lastRpc().written.some((c) => c['type'] === 'prompt')).toBe(false)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({
+          delta: expect.stringContaining('compact'),
+        })
+      )
+    })
+
+    it('TUI hints also apply on the steer path (busy agent)', async () => {
+      const sessionId = await createSession()
+      rpcMock.shared.responder = async (cmd) => {
+        if (cmd['type'] === 'get_state') return { isStreaming: true }
+        return defaultHandler(cmd)
+      }
+      await service.steer(sessionId, '/resume')
+      expect(lastRpc().written.some((c) => c['type'] === 'steer')).toBe(false)
+      expect(onEvent).toHaveBeenCalledWith(
+        'pi:token',
+        expect.objectContaining({ delta: expect.stringContaining('/resume') })
+      )
+    })
+
     it('retries with streamingBehavior=steer when the agent is already streaming', async () => {
       const sessionId = await createSession()
       const rpc = lastRpc()

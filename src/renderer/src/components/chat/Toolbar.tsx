@@ -18,6 +18,7 @@ export default function Toolbar() {
   const tab = useActiveTab()
   const availableModels = useAvailableModels()
   const patchTab = useStore((s) => s.patchTab)
+  const setTabStatus = useStore((s) => s.setTabStatus)
   const toggleDiffPane = useStore((s) => s.toggleDiffPane)
   /** Sessions whose thinking info was already fetched (per model). */
   const thinkingFetchedFor = useRef('')
@@ -25,14 +26,14 @@ export default function Toolbar() {
   const tabId = tab?.id
   const sessionId = tab?.sessionId
   const mode = tab?.mode
-  const status = tab?.status
 
   // Mirror the session's real thinking state: levels come from the model the
-  // chat is actually running — fetched once per session once the RPC is up.
-  // Failed attempts retry with backoff: waiting for a status flip is not
-  // enough (a late boot or a dropped ready event left the UI model-blind).
+  // chat is actually running — fetched once per session. RPC requests sent
+  // while the CLI is still booting queue on stdin and answer once ready, so
+  // a SUCCESSFUL fetch doubles as a readiness proof: if the ready event was
+  // lost (resume race), this self-heals the tab out of 'booting'.
   useEffect(() => {
-    if (!tabId || !sessionId || mode !== 'active' || status === 'booting') return
+    if (!tabId || !sessionId || mode !== 'active') return
     if (thinkingFetchedFor.current === sessionId) return
 
     let cancelled = false
@@ -47,9 +48,13 @@ export default function Toolbar() {
           if (cancelled) return
           thinkingFetchedFor.current = sessionId
           patchTab(tabId, { thinkingLevel: info.level, thinkingLevels: info.levels })
+          // Self-heal: an answered request proves the session is up — flip a
+          // stale 'booting' status (dropped pi:session-ready) to idle.
+          const t = useStore.getState().tabs.tabs.find((x) => x.id === tabId)
+          if (t && t.status === 'booting') setTabStatus(tabId, 'idle')
         } catch {
-          // RPC may briefly reject during boot transitions — retry instead
-          // of staying model-blind until a manual model change.
+          // RPC may briefly reject during transitions — retry instead of
+          // staying model-blind until a manual model change.
           if (++tries < 20 && !cancelled) {
             retryTimer = setTimeout(attempt, 3000)
           }
@@ -62,7 +67,7 @@ export default function Toolbar() {
       cancelled = true
       if (retryTimer) clearTimeout(retryTimer)
     }
-  }, [tabId, sessionId, mode, status, patchTab])
+  }, [tabId, sessionId, mode, patchTab, setTabStatus])
 
   if (!tab) return null
 

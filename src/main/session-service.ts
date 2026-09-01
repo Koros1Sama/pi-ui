@@ -88,7 +88,31 @@ const RPC_BUILTINS: SlashCommand[] = [
   },
 ]
 
-const BUILTIN_PATTERN = /^\/(compact|export|name|stats|tree)(?:\s+([\s\S]*))?$/
+const BUILTIN_PATTERN = /^\/(compact|export|name|stats|tree|help|model|thinking)(?:\s+([\s\S]*))?$/
+
+/** pi TUI builtins that have no RPC execution — intercepted with a friendly
+ *  GUI hint instead of falling through to the LLM as literal text (pi's
+ *  prompt() only handles extension commands + skill/template expansion). */
+const PI_TUI_COMMANDS: Record<string, string> = {
+  settings: 'open **Settings** from the sidebar (⌘,)',
+  'scoped-models': 'star models in **Settings → Favorite Models** (Ctrl+P cycles them)',
+  share: 'TUI-only — not available in the desktop UI yet',
+  copy: 'select the message text and copy (Ctrl+C)',
+  changelog: 'TUI-only',
+  hotkeys:
+    'shortcuts: **Ctrl+Tab** switch tabs · **Shift+Tab** cycle effort · **Ctrl+P** favorite models · **Esc** abort · **Ctrl+PageUp/Down** tab position',
+  trust: 'managed automatically by the desktop UI',
+  login: 'add the key in **Settings → API Keys**, or run `pi /login <provider>` in a terminal',
+  logout: 'run `pi /logout <provider>` in a terminal',
+  reload: 'close and reopen the tab to reload extensions',
+  quit: 'close the tab (×) or the window',
+  session: 'see `/stats`',
+  import: 'click a past session in the sidebar to open it',
+  resume: 'click a session in the sidebar, then **Resume**',
+  new: 'press **+** in the tab bar',
+  fork: 'use `/tree` and pick a user message to fork from',
+  clone: 'TUI-only',
+}
 
 export class SessionService {
   private readonly sessions = new Map<string, ActiveSession>()
@@ -130,6 +154,11 @@ export class SessionService {
       await this.runBuiltin(sessionId, entry, builtin[1], (builtin[2] ?? '').trim())
       return
     }
+    const tui = this.tuiCommandHint(message)
+    if (tui) {
+      this.emitAssistantText(sessionId, entry, tui)
+      return
+    }
     try {
       await entry.rpc.request({ type: 'prompt', message })
     } catch (err) {
@@ -150,6 +179,11 @@ export class SessionService {
     const builtin = BUILTIN_PATTERN.exec(text.trim())
     if (builtin) {
       await this.runBuiltin(sessionId, entry, builtin[1], (builtin[2] ?? '').trim())
+      return
+    }
+    const tui = this.tuiCommandHint(text)
+    if (tui) {
+      this.emitAssistantText(sessionId, entry, tui)
       return
     }
     // pi's steer never rejects when idle — it silently queues the text for
@@ -470,6 +504,14 @@ export class SessionService {
   }
 
   /** Execute a TUI built-in via its direct RPC equivalent and render the result in chat. */
+  /** Friendly GUI hint for pi TUI-only builtins (never reach the LLM). */
+  private tuiCommandHint(text: string): string | null {
+    const m = /^\/([\w:-]+)(?:\s|$)/.exec(text.trim())
+    if (!m) return null
+    const hint = PI_TUI_COMMANDS[m[1]!]
+    return hint ? `**/${m[1]}** — ${hint}` : null
+  }
+
   private async runBuiltin(
     sessionId: string,
     entry: ActiveSession,
@@ -562,6 +604,47 @@ export class SessionService {
             entry,
             e?.path ? `Session exported to:\n\`${e.path}\`` : 'Export failed — no path returned.'
           )
+          break
+        }
+        case 'help': {
+          const local = ['compact', 'export', 'name', 'stats', 'tree', 'help', 'model', 'thinking']
+          const cmds = entry.commandsCache ?? []
+          const ext = cmds.map(
+            (c) => `- \`/${c.name}\`${c.description ? ` — ${c.description}` : ''}`
+          )
+          this.emitAssistantText(
+            sessionId,
+            entry,
+            `**Commands**\n\nDesktop builtins:\n${local.map((n) => `- \`/${n}\``).join('\n')}\n\nExtensions / skills / templates:\n${ext.length ? ext.join('\n') : '_(still loading — try again in a moment)_'}\n\nOther pi TUI commands (like /new, /resume) answer with a desktop hint.`
+          )
+          break
+        }
+        case 'model': {
+          if (!args.includes('/')) {
+            this.emitAssistantText(
+              sessionId,
+              entry,
+              'Usage: `/model <provider/modelId>` — or pick from the toolbar dropdown.'
+            )
+            break
+          }
+          const [provider, ...rest] = args.split('/')
+          const modelId = rest.join('/')
+          await entry.rpc.request({ type: 'set_model', provider, modelId })
+          this.emitAssistantText(sessionId, entry, `Model set to **${provider}/${modelId}**.`)
+          break
+        }
+        case 'thinking': {
+          if (!args) {
+            this.emitAssistantText(
+              sessionId,
+              entry,
+              'Usage: `/thinking <level>` — or use the effort buttons / Shift+Tab.'
+            )
+            break
+          }
+          await entry.rpc.request({ type: 'set_thinking_level', level: args })
+          this.emitAssistantText(sessionId, entry, `Thinking level set to **${args}**.`)
           break
         }
       }
