@@ -24,6 +24,9 @@ export function useTabShortcuts(): void {
     function commitWalk(): void {
       const target = useStore.getState().tabs.previewTabId
       useStore.getState().setTabPreview(null)
+      // END the walk — the next Ctrl+Tab press must start a FRESH walk from
+      // the newly-active tab (previously-focused first), not continue.
+      walk = null
       if (target) useStore.getState().setActiveTab(target)
     }
 

@@ -59,12 +59,23 @@ export function usePiEvents(): void {
       }),
 
       window.pi.on('pi:session-ready', ({ sessionId }) => {
-        const tabId = findTabId(sessionId)
-        if (!tabId) return
-        // A freshly booted session becomes usable (booting → idle) without
-        // clobbering a thinking state if the user already sent.
-        const tab = useStore.getState().tabs.tabs.find((t) => t.id === tabId)
-        if (tab && tab.status === 'booting') setTabStatus(tabId, 'idle')
+        const apply = (): boolean => {
+          const tabId = findTabId(sessionId)
+          if (!tabId) return false
+          // A freshly booted session becomes usable (booting → idle) without
+          // clobbering a thinking state if the user already sent.
+          const tab = useStore.getState().tabs.tabs.find((t) => t.id === tabId)
+          if (tab && tab.status === 'booting') setTabStatus(tabId, 'idle')
+          return true
+        }
+        if (apply()) return
+        // RESUME RACE: the ready event can arrive before the renderer has
+        // applied the replaceTab that registers this sessionId — dropping it
+        // left the tab stuck in 'booting' forever. Retry briefly instead.
+        let tries = 0
+        const timer = setInterval(() => {
+          if (apply() || ++tries > 20) clearInterval(timer)
+        }, 250)
       }),
 
       window.pi.on('pi:user-message', ({ sessionId }) => {

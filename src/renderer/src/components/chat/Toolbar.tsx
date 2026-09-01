@@ -29,23 +29,38 @@ export default function Toolbar() {
 
   // Mirror the session's real thinking state: levels come from the model the
   // chat is actually running — fetched once per session once the RPC is up.
-  // Failed attempts (still booting) retry on the next status flip.
+  // Failed attempts retry with backoff: waiting for a status flip is not
+  // enough (a late boot or a dropped ready event left the UI model-blind).
   useEffect(() => {
     if (!tabId || !sessionId || mode !== 'active' || status === 'booting') return
     if (thinkingFetchedFor.current === sessionId) return
+
     let cancelled = false
-    void (async () => {
-      try {
-        const info = await window.pi.session.getThinking(sessionId)
-        if (cancelled) return
-        thinkingFetchedFor.current = sessionId
-        patchTab(tabId, { thinkingLevel: info.level, thinkingLevels: info.levels })
-      } catch {
-        // RPC not ready yet — the effect re-runs when the status changes
-      }
-    })()
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let tries = 0
+
+    const attempt = (): void => {
+      if (cancelled) return
+      void (async () => {
+        try {
+          const info = await window.pi.session.getThinking(sessionId)
+          if (cancelled) return
+          thinkingFetchedFor.current = sessionId
+          patchTab(tabId, { thinkingLevel: info.level, thinkingLevels: info.levels })
+        } catch {
+          // RPC may briefly reject during boot transitions — retry instead
+          // of staying model-blind until a manual model change.
+          if (++tries < 20 && !cancelled) {
+            retryTimer = setTimeout(attempt, 3000)
+          }
+        }
+      })()
+    }
+
+    attempt()
     return () => {
       cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
     }
   }, [tabId, sessionId, mode, status, patchTab])
 

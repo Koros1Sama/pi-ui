@@ -23,6 +23,17 @@ describe.skipIf(!process.env['REAL_PI'])(
         onEvent
       )
       try {
+        // Fresh-session thinking info: level + the levels THIS model supports
+        // (the exact call the Toolbar makes when a session becomes ready).
+        await waitFor(() => {
+          if (events.some((e) => e.event === 'pi:session-ready')) return
+          throw new Error('not ready yet')
+        }, 120_000)
+        const info = await svc.getThinkingInfo(sessionId)
+        console.log('[real] thinking info:', JSON.stringify(info))
+        expect(typeof info.level).toBe('string')
+        expect(info.levels.length).toBeGreaterThan(1) // glm supports effort levels
+
         // /tree — pi-ui builtin intercepted locally: get_tree + text + picker
         await svc.send(sessionId, '/tree')
         const treePicker = await waitFor(
