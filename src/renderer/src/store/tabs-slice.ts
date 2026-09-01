@@ -12,6 +12,8 @@ export interface Tab {
   model: string
   provider: string
   thinkingLevel: AppThinkingLevel
+  /** Thinking levels the session's current model supports (fetched live per model). Undefined = not fetched yet. */
+  thinkingLevels?: string[]
   status: 'idle' | 'booting' | 'thinking' | 'error'
   messages: Message[]
   currentStreamingContent: string
@@ -54,7 +56,10 @@ export interface TabsActions {
   replaceTab(tabId: string, newTab: Tab): void
   /** Narrow field update — unlike replaceTab it can't clobber concurrent
    *  streaming state (tokens/status) with a stale render-time snapshot. */
-  patchTab(tabId: string, patch: Partial<Pick<Tab, 'model' | 'provider' | 'thinkingLevel'>>): void
+  patchTab(
+    tabId: string,
+    patch: Partial<Pick<Tab, 'model' | 'provider' | 'thinkingLevel' | 'thinkingLevels'>>
+  ): void
   setTabDiff(tabId: string, diff: TabDiff): void
   toggleDiffPane(tabId: string): void
   addDiffComment(tabId: string, comment: DiffComment): void

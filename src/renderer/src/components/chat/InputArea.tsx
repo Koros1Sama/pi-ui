@@ -1,5 +1,6 @@
 // src/renderer/src/components/chat/InputArea.tsx
-import { useState, useRef, type KeyboardEvent, type DragEvent } from 'react'
+import { useState, useRef, useEffect, type KeyboardEvent, type DragEvent } from 'react'
+import { ArrowUp, Square } from 'lucide-react'
 import { useStore } from '@/store'
 import { Button } from '@/components/ui/button'
 import FileChips, { type AttachedFile } from './FileChips'
@@ -76,6 +77,15 @@ export default function InputArea({ tabId }: { tabId: string }) {
   const commandCacheRef = useRef<{ tabId: string; commands: SlashCommand[] } | null>(null)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Auto-grow (chat-app style): the field expands with its content between a
+  // comfortable minimum and a hard maximum instead of staying one cramped row.
+  useEffect(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 160)}px`
+  }, [value])
 
   if (!tab || tab.mode !== 'active') return null
 
@@ -265,7 +275,7 @@ export default function InputArea({ tabId }: { tabId: string }) {
     if (!tab) return
     try {
       const res = await window.pi.session.cycleThinking(tab.sessionId)
-      patchTab(tab.id, { thinkingLevel: res.level })
+      patchTab(tab.id, { thinkingLevel: res.level, thinkingLevels: res.levels })
       useStore.getState().setToast({ message: `🧠 thinking: ${res.level}`, level: 'info' })
       // Persist as the default so new sessions start at the chosen effort.
       await window.pi.config.setDefaults({ defaultThinkingLevel: res.level })
@@ -358,6 +368,7 @@ export default function InputArea({ tabId }: { tabId: string }) {
           )}
           <textarea
             ref={textareaRef}
+            dir="auto"
             data-testid="chat-input"
             value={value}
             onChange={(e) => handleChange(e.target.value)}
@@ -373,7 +384,7 @@ export default function InputArea({ tabId }: { tabId: string }) {
                     : 'Send a message… (Enter to send, Shift+Enter for newline)'
             }
             className="w-full resize-none bg-transparent px-3 py-2.5 pe-16 text-zinc-300 placeholder-zinc-600 outline-none"
-            style={{ minHeight: 40, maxHeight: 160 }}
+            style={{ minHeight: 44, maxHeight: 160 }}
           />
           <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1">
             {!thinking && (
@@ -393,9 +404,9 @@ export default function InputArea({ tabId }: { tabId: string }) {
                 size="sm"
                 onClick={send}
                 disabled={!canSend}
-                className="h-7 border border-zinc-700 bg-zinc-800 px-2 text-zinc-400 hover:text-zinc-200"
+                className="h-7 w-7 justify-center border border-zinc-700 bg-zinc-800 p-0 text-zinc-400 hover:text-zinc-200"
               >
-                ↵
+                <ArrowUp size={14} />
               </Button>
             )}
             {thinking && (
@@ -405,9 +416,9 @@ export default function InputArea({ tabId }: { tabId: string }) {
                 size="sm"
                 variant="ghost"
                 onClick={handleAbort}
-                className="h-7 border border-zinc-700 bg-zinc-800 px-2 text-zinc-500 hover:text-zinc-300"
+                className="h-7 w-7 justify-center border border-zinc-700 bg-zinc-800 p-0 text-zinc-500 hover:text-zinc-300"
               >
-                ■
+                <Square size={10} />
               </Button>
             )}
           </div>
