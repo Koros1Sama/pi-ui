@@ -166,9 +166,10 @@ export default function InputArea({ tabId }: { tabId: string }) {
   async function sendDirect(msg: string) {
     if (!tab) return
     if (tab.status === 'thinking') {
-      // Steering: delivered between tool calls after the current turn.
-      // Echoed to the transcript so the message is never invisible.
-      addUserMessage(tab.id, msg)
+      // Steering: delivered between tool calls AFTER the current turn. Echoed
+      // immediately but flagged pending — the badge clears when the session
+      // confirms the message entered the transcript.
+      addUserMessage(tab.id, msg, true)
       try {
         await window.pi.session.steer(tab.sessionId, msg)
       } catch (err) {
@@ -383,7 +384,7 @@ export default function InputArea({ tabId }: { tabId: string }) {
                     ? 'Drop file to attach…'
                     : 'Send a message… (Enter to send, Shift+Enter for newline)'
             }
-            className="w-full resize-none bg-transparent px-3 py-2.5 pe-16 text-zinc-300 placeholder-zinc-600 outline-none"
+            className="w-full resize-none bg-transparent px-[72px] py-2.5 text-zinc-300 placeholder-zinc-600 outline-none"
             style={{ minHeight: 44, maxHeight: 160 }}
           />
           <div className="absolute end-2 top-1/2 flex -translate-y-1/2 items-center gap-1">

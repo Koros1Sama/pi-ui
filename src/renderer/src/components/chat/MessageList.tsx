@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { memo } from 'react'
+import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
 import ToolCallEntry from './ToolCallEntry'
@@ -32,10 +34,20 @@ const UserMessage = memo(function UserMessage({ msg }: { msg: Message }) {
     <div
       data-testid="user-message"
       dir="auto"
-      className="mx-3 my-1 rounded px-3 py-2"
+      className={cn('mx-3 my-1 rounded px-3 py-2', msg.pending && 'opacity-60')}
       style={{ backgroundColor: 'var(--pi-user-msg-bg)' }}
     >
       <PiMarkdown>{msg.content}</PiMarkdown>
+      {msg.pending && (
+        <div
+          data-testid="queued-badge"
+          className="mt-1 flex items-center gap-1 text-[10px]"
+          style={{ color: 'var(--pi-dim)' }}
+        >
+          <Loader2 size={10} className="animate-pulse" />
+          <span>queued — enters the chat after the current tool calls</span>
+        </div>
+      )}
     </div>
   )
 })

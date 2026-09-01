@@ -103,6 +103,8 @@ describe('ChatPane', () => {
     fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' })
     await waitFor(() => expect(mockSteer).toHaveBeenCalledWith('s1', 'stop that'))
     expect(mockSend).not.toHaveBeenCalled()
+    // Steered message stays visible, flagged queued until delivery confirms
+    expect(screen.getByTestId('queued-badge')).toBeInTheDocument()
   })
 
   it('shows steering label in status bar when thinking', () => {

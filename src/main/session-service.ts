@@ -654,6 +654,29 @@ export class SessionService {
       case 'turn_end':
         entry.onEvent('pi:turn-end', { sessionId })
         break
+      case 'message_end': {
+        // A USER message entering the transcript means a steered message was
+        // actually delivered — the steer response resolves earlier (queue time).
+        const message = ev['message'] as { role?: string; content?: unknown } | undefined
+        if (message?.role === 'user') {
+          let content = ''
+          if (typeof message.content === 'string') content = message.content
+          else if (Array.isArray(message.content)) {
+            content = message.content
+              .filter(
+                (c): c is { type: 'text'; text: string } =>
+                  (c as { type?: string }).type === 'text' &&
+                  typeof (c as { text?: unknown }).text === 'string'
+              )
+              .map((c) => c.text)
+              .join('')
+          }
+          if (content) {
+            entry.onEvent('pi:user-message', { sessionId, content, timestamp: Date.now() })
+          }
+        }
+        break
+      }
       // Only the settled event means the run is truly over (retries,
       // compaction and queued follow-ups included). Mapping agent_end too
       // re-enabled the input mid-run and caused send-race fallbacks.

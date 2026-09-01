@@ -105,6 +105,9 @@ export interface Message {
   content: string
   toolCalls: ToolCall[]
   createdAt: number
+  /** Steered while the agent was busy: queued visually until the session
+   * confirms delivery (pi:user-message echo). */
+  pending?: boolean
 }
 
 export interface ToolResultDetails {
@@ -203,6 +206,8 @@ export interface PiEventPayloads {
   }
   /** Extension footer status entry, null clears. */
   'pi:status': { sessionId: string; statusKey: string; text: string | null }
+  /** A user message actually entered the session transcript (steer delivery). */
+  'pi:user-message': { sessionId: string; content: string; timestamp: number }
   /** Interactive session-tree picker (fork points from /tree). */
   'pi:tree-picker': { sessionId: string; nodes: TreePickerNode[] }
   'update:checking': Record<string, never>

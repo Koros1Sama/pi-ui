@@ -14,6 +14,8 @@ export function usePiEvents(): void {
   const addToolCall = useStore((s) => s.addToolCall)
   const resolveToolCall = useStore((s) => s.resolveToolCall)
   const setTabDiff = useStore((s) => s.setTabDiff)
+  const confirmPendingUserMessage = useStore((s) => s.confirmPendingUserMessage)
+  const clearPendingUserMessages = useStore((s) => s.clearPendingUserMessages)
 
   useEffect(() => {
     function findTabId(sessionId: string): string | null {
@@ -43,6 +45,9 @@ export function usePiEvents(): void {
         const tabId = findTabId(sessionId)
         if (!tabId) return
         pendingTokens.set(tabId, (pendingTokens.get(tabId) ?? '') + delta)
+        // Streaming resumes only after the steer queue flushed — any queued
+        // user message is definitely inside the transcript by now.
+        clearPendingUserMessages(tabId)
       }),
 
       window.pi.on('pi:booting', ({ sessionId }) => {
@@ -59,6 +64,14 @@ export function usePiEvents(): void {
         // clobbering a thinking state if the user already sent.
         const tab = useStore.getState().tabs.tabs.find((t) => t.id === tabId)
         if (tab && tab.status === 'booting') setTabStatus(tabId, 'idle')
+      }),
+
+      window.pi.on('pi:user-message', ({ sessionId }) => {
+        const tabId = findTabId(sessionId)
+        if (!tabId) return
+        // The session echoed a user message into the transcript — the oldest
+        // pending (steered) one is delivered (FIFO queue).
+        confirmPendingUserMessage(tabId)
       }),
 
       window.pi.on('pi:tool-start', ({ sessionId, toolCallId, toolName, args }) => {
@@ -95,6 +108,8 @@ export function usePiEvents(): void {
         if (!tabId) return
         finalizeAssistantMessage(tabId)
         setTabStatus(tabId, 'idle')
+        // Run fully settled: nothing stays queued.
+        clearPendingUserMessages(tabId)
       }),
 
       window.pi.on('pi:error', ({ sessionId }) => {
@@ -122,5 +137,7 @@ export function usePiEvents(): void {
     addToolCall,
     resolveToolCall,
     setTabDiff,
+    confirmPendingUserMessage,
+    clearPendingUserMessages,
   ])
 }
