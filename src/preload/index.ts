@@ -122,6 +122,7 @@ if (process.env['PI_E2E']) {
       }),
       cycleThinking: async () => ({ level: 'high', levels: ['off', 'low', 'high'] }),
       setThinking: async () => {},
+      getThinking: async () => ({ level: 'low', levels: ['off', 'low', 'high'] }),
       abort: async (sessionId) => {
         emit('pi:idle', { sessionId })
       },
@@ -172,6 +173,29 @@ if (process.env['PI_E2E']) {
           fileCount: 4,
           matchCount: 1,
           durationMs: 12,
+        }
+      },
+      conversations: async (query: string) => {
+        // Mock conversation search: a match inside the mock past session.
+        const q = query.replace(/from:\S+/gi, '').trim()
+        if (!q) {
+          return { matches: [], truncated: false, fileCount: 0, matchCount: 0, durationMs: 0 }
+        }
+        return {
+          matches: [
+            {
+              path: '/mock/sessions/--mock-project--/2024-01-01T00-00-00-000Z_past-session-1.jsonl',
+              cwd: '/mock/project',
+              role: 'user',
+              timestamp: Date.now() - 3600_000,
+              snippet: `This is a past message matching: ${q}`,
+              term: q.split(/\s+/)[0] ?? q,
+            },
+          ],
+          truncated: false,
+          fileCount: 2,
+          matchCount: 1,
+          durationMs: 8,
         }
       },
     },
@@ -262,6 +286,7 @@ if (process.env['PI_E2E']) {
       cycleThinking: (sessionId) => ipcRenderer.invoke('session:cycleThinking', { sessionId }),
       setThinking: (sessionId, level) =>
         ipcRenderer.invoke('session:setThinking', { sessionId, level }),
+      getThinking: (sessionId) => ipcRenderer.invoke('session:getThinking', { sessionId }),
       abort: (sessionId) => ipcRenderer.invoke('session:abort', { sessionId }),
       close: (sessionId) => ipcRenderer.invoke('session:close', { sessionId }),
     },
@@ -282,6 +307,7 @@ if (process.env['PI_E2E']) {
     },
     search: {
       content: (req) => ipcRenderer.invoke('search:content', req),
+      conversations: (query) => ipcRenderer.invoke('search:conversations', { query }),
     },
     sessions: {
       list: () => ipcRenderer.invoke('sessions:list'),

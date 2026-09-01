@@ -74,6 +74,31 @@ export interface ContentSearchResult {
   durationMs: number
 }
 
+// ── Conversation search (inside chat transcripts) ──────────────────────────
+
+export interface ConversationSearchMatch {
+  /** Full path to the session JSONL file */
+  path: string
+  /** Session cwd (from the session header line) */
+  cwd: string
+  /** 'user' = sent by the human, 'assistant' = AI reply */
+  role: 'user' | 'assistant'
+  /** Message timestamp (ms) when available */
+  timestamp: number
+  /** Concatenated text of the message (trimmed to ~300 chars) */
+  snippet: string
+  /** The first include term that matched (for highlighting) */
+  term: string
+}
+
+export interface ConversationSearchResult {
+  matches: ConversationSearchMatch[]
+  truncated: boolean
+  fileCount: number
+  matchCount: number
+  durationMs: number
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -249,6 +274,8 @@ export interface PiAPI {
     ): Promise<{ provider: string; modelId: string; displayName: string }>
     cycleThinking(sessionId: string): Promise<{ level: AppThinkingLevel; levels: string[] }>
     setThinking(sessionId: string, level: AppThinkingLevel): Promise<void>
+    /** Current level + the levels the session's model actually supports */
+    getThinking(sessionId: string): Promise<{ level: AppThinkingLevel; levels: AppThinkingLevel[] }>
     abort(sessionId: string): Promise<void>
     close(sessionId: string): Promise<void>
   }
@@ -270,6 +297,8 @@ export interface PiAPI {
   search: {
     /** Everything-style content search across a project directory */
     content(req: { cwd: string; query: string; maxMatches?: number }): Promise<ContentSearchResult>
+    /** Everything-style search inside conversation transcripts */
+    conversations(query: string): Promise<ConversationSearchResult>
   }
   sessions: {
     list(): Promise<SessionSummary[]>

@@ -340,6 +340,20 @@ export class SessionService {
     return { level, levels }
   }
 
+  /** Current thinking level + the levels the session's model supports. */
+  async getThinkingInfo(
+    sessionId: string
+  ): Promise<{ level: AppThinkingLevel; levels: AppThinkingLevel[] }> {
+    const entry = this.getOrThrow(sessionId)
+    const [state, data] = await Promise.all([
+      entry.rpc.request<{ thinkingLevel?: string }>({ type: 'get_state' }),
+      entry.rpc.request<{ levels?: string[] }>({ type: 'get_available_thinking_levels' }),
+    ])
+    const levels = (data?.levels?.length ? data.levels : ['off']) as AppThinkingLevel[]
+    const level = String(state?.thinkingLevel ?? 'off') as AppThinkingLevel
+    return { level, levels }
+  }
+
   // ── internals ─────────────────────────────────────────────────────────────
 
   private attachAndRegister(

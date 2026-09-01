@@ -79,6 +79,26 @@ function firstIndex(haystack: string, haystackLower: string, term: SearchTerm): 
   return haystackLower.indexOf(term.text)
 }
 
+/** True when `text` satisfies every include term and no exclude term. */
+export function matchText(parsed: ParsedQuery, text: string): boolean {
+  const lower = parsed.caseSensitive ? text : text.toLowerCase()
+  return (
+    parsed.includes.every((t) => matchTerm(text, lower, t)) &&
+    !parsed.excludes.some((t) => matchTerm(text, lower, t))
+  )
+}
+
+/** 0-based index of the first include-term hit in `text` (-1 if none). */
+export function firstMatchIndex(parsed: ParsedQuery, text: string): number {
+  const lower = parsed.caseSensitive ? text : text.toLowerCase()
+  let best = -1
+  for (const t of parsed.includes) {
+    const idx = firstIndex(text, lower, t)
+    if (idx >= 0 && (best === -1 || idx < best)) best = idx
+  }
+  return best
+}
+
 /**
  * Everything-style query syntax:
  *

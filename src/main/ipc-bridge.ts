@@ -6,6 +6,7 @@ import type { SettingsService } from './settings-service'
 import type { PreferencesService } from './preferences-service'
 import type { SessionService } from './session-service'
 import { ContentSearchService } from './content-search-service'
+import { ConversationSearchService } from './conversation-search-service'
 import { homedir } from 'os'
 import { SessionStore } from './session-store'
 import type { PiEventName, PiEventPayloads } from '@shared/types'
@@ -23,7 +24,8 @@ export class IpcBridge {
     private readonly prefs: PreferencesService,
     private readonly sessions: SessionService,
     private readonly store: SessionStore,
-    private readonly contentSearch: ContentSearchService = new ContentSearchService()
+    private readonly contentSearch: ContentSearchService = new ContentSearchService(),
+    private readonly convoSearch: ConversationSearchService = new ConversationSearchService()
   ) {}
 
   setUpdater(updater: UpdateService | null): void {
@@ -224,6 +226,15 @@ export class IpcBridge {
       }
     )
 
+    this.handle('session:getThinking', async (_e, { sessionId }: { sessionId: string }) => {
+      try {
+        return await this.sessions.getThinkingInfo(sessionId)
+      } catch (err) {
+        console.error('[session:getThinking]', err)
+        throw err
+      }
+    })
+
     this.handle('session:close', (_e, { sessionId }: { sessionId: string }) => {
       this.sessions.closeSession(sessionId)
     })
@@ -270,6 +281,9 @@ export class IpcBridge {
   private registerSearch(): void {
     this.handle('search:content', (_e, req: { cwd: string; query: string; maxMatches?: number }) =>
       this.contentSearch.search(req)
+    )
+    this.handle('search:conversations', (_e, { query }: { query: string }) =>
+      this.convoSearch.search(query)
     )
   }
 
