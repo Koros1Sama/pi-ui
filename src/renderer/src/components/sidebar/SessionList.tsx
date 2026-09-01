@@ -6,7 +6,7 @@ import { formatTimestamp } from './SessionEntry'
 import CwdGroup from './CwdGroup'
 import SessionEntry from './SessionEntry'
 import SessionSearch from './SessionSearch'
-import ContentSearchPanel from './ContentSearchPanel'
+import ConversationSearchPanel from './ConversationSearchPanel'
 import type { SessionSummary } from '@shared/types'
 
 function cwdBasename(cwd: string): string {
@@ -231,7 +231,7 @@ export default function SessionList() {
       />
 
       {contentMode ? (
-        <ContentSearchPanel query={query} />
+        <ConversationSearchPanel query={query} onSelectSession={handleSelectSession} />
       ) : (
         <>
           {sessions.length > 0 && (
