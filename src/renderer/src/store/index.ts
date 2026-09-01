@@ -44,9 +44,12 @@ export const useStore = create<AppStore>()(
     ...createHistorySlice(set as Parameters<typeof createHistorySlice>[0]),
   }))
 )
+// SAFETY: zustand v5 exposes getInitialState only after store creation;
+// re-binding it here gives tests a full fresh-state reset. The cast asserts
+// the factory shape matches the combined store's initial state.
 ;(useStore as unknown as { getInitialState: () => typeof initialState }).getInitialState = () => ({
   ...initialState,
-  tabs: { tabs: [], activeTabId: null },
+  tabs: { tabs: [], activeTabId: null, mru: [] },
   config: { ...initialConfigState, providers: [], models: [] },
   ui: { ...initialUiState },
   history: { ...initialHistoryState },

@@ -4,6 +4,7 @@ import { useStore } from './store'
 import { usePiEvents } from './hooks/usePiEvents'
 import { useUpdateEvents } from './hooks/useUpdateEvents'
 import { useResolvedDirection } from './hooks/useResolvedDirection'
+import { useTabShortcuts } from './hooks/useTabShortcuts'
 import Sidebar from './components/sidebar/Sidebar'
 import TabBar from './components/tabs/TabBar'
 import ChatPane from './components/chat/ChatPane'
@@ -30,6 +31,8 @@ export default function App() {
   useUpdateEvents()
   // RTL/LTR shell direction (auto-detects from OS locale unless overridden)
   useResolvedDirection()
+  // Ctrl+Tab (MRU) / Ctrl+PageUp/Down (positional) tab navigation
+  useTabShortcuts()
 
   const loadSessions = useCallback(async () => {
     try {

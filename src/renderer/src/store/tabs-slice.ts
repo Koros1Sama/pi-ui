@@ -27,6 +27,29 @@ export interface Tab {
 export interface TabsState {
   tabs: Tab[]
   activeTabId: string | null
+  /** Most-recently-used tab ids (front = current). Drives Ctrl+Tab MRU
+   *  switching, Firefox/Alt+Tab style. */
+  mru: string[]
+}
+
+/** Next tab when cycling MRU order (delta 1 = toward older, -1 = reverse). */
+export function mruTarget(mru: string[], currentId: string | null, delta: 1 | -1): string | null {
+  if (mru.length < 2 || !currentId) return null
+  const i = mru.indexOf(currentId)
+  if (i === -1) return mru[0] ?? null
+  return mru[(i + delta + mru.length) % mru.length] ?? null
+}
+
+/** Next tab when cycling tab-bar POSITION (delta 1 = right, -1 = left). */
+export function positionalTarget(
+  tabs: Tab[],
+  currentId: string | null,
+  delta: 1 | -1
+): string | null {
+  if (tabs.length < 2 || !currentId) return null
+  const i = tabs.findIndex((t) => t.id === currentId)
+  if (i === -1) return tabs[0]?.id ?? null
+  return tabs[(i + delta + tabs.length) % tabs.length]?.id ?? null
 }
 
 export interface TabsActions {
@@ -36,7 +59,11 @@ export interface TabsActions {
   setTabStatus(tabId: string, status: Tab['status']): void
   setTabMode(tabId: string, mode: TabMode): void
   setTabMessages(tabId: string, messages: Message[]): void
-  addUserMessage(tabId: string, content: string): void
+  addUserMessage(tabId: string, content: string, pending?: boolean): void
+  /** The session confirmed delivery of the oldest pending (steered) message. */
+  confirmPendingUserMessage(tabId: string): void
+  /** Flush all pending markers (activity resumed / turn settled). */
+  clearPendingUserMessages(tabId: string): void
   appendToken(tabId: string, delta: string): void
   finalizeAssistantMessage(tabId: string): void
   addToolCall(
@@ -70,6 +97,7 @@ export interface TabsActions {
 export const initialTabsState: TabsState = {
   tabs: [],
   activeTabId: null,
+  mru: [],
 }
 
 export const createTabsSlice = (
@@ -79,6 +107,7 @@ export const createTabsSlice = (
     set((s) => {
       s.tabs.tabs.push(tab)
       s.tabs.activeTabId = tab.id
+      s.tabs.mru = [tab.id, ...s.tabs.mru.filter((id) => id !== tab.id)]
     }),
 
   closeTab: (tabId) =>
@@ -86,6 +115,7 @@ export const createTabsSlice = (
       const idx = s.tabs.tabs.findIndex((t) => t.id === tabId)
       if (idx === -1) return
       s.tabs.tabs.splice(idx, 1)
+      s.tabs.mru = s.tabs.mru.filter((id) => id !== tabId)
       if (s.tabs.activeTabId === tabId) {
         const next = s.tabs.tabs[idx - 1] ?? s.tabs.tabs[idx] ?? null
         s.tabs.activeTabId = next?.id ?? null
@@ -95,6 +125,9 @@ export const createTabsSlice = (
   setActiveTab: (tabId) =>
     set((s) => {
       s.tabs.activeTabId = tabId
+      // Recency order only changes on USER-driven focus, not programmatic
+      // tab bookkeeping — safe to record on every activation.
+      s.tabs.mru = [tabId, ...s.tabs.mru.filter((id) => id !== tabId)]
     }),
 
   setTabStatus: (tabId, status) =>
@@ -115,7 +148,7 @@ export const createTabsSlice = (
       if (tab) tab.messages = messages
     }),
 
-  addUserMessage: (tabId, content) =>
+  addUserMessage: (tabId, content, pending) =>
     set((s) => {
       const tab = s.tabs.tabs.find((t) => t.id === tabId)
       if (!tab) return
@@ -125,7 +158,23 @@ export const createTabsSlice = (
         content,
         toolCalls: [],
         createdAt: Date.now(),
+        pending,
       })
+    }),
+
+  confirmPendingUserMessage: (tabId) =>
+    set((s) => {
+      const tab = s.tabs.tabs.find((t) => t.id === tabId)
+      if (!tab) return
+      const first = tab.messages.find((m) => m.pending)
+      if (first) first.pending = false
+    }),
+
+  clearPendingUserMessages: (tabId) =>
+    set((s) => {
+      const tab = s.tabs.tabs.find((t) => t.id === tabId)
+      if (!tab) return
+      for (const m of tab.messages) if (m.pending) m.pending = false
     }),
 
   appendToken: (tabId, delta) =>
@@ -214,6 +263,7 @@ export const createTabsSlice = (
       if (idx === -1) return
       s.tabs.tabs[idx] = newTab
       s.tabs.activeTabId = newTab.id
+      s.tabs.mru = s.tabs.mru.map((id) => (id === tabId ? newTab.id : id))
     }),
 
   patchTab: (tabId, patch) =>
