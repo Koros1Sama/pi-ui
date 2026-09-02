@@ -49,9 +49,12 @@ export function resolveCliJsPath(): string {
 
   const candidates: string[] = []
   try {
-    const res = spawnSync('npm', ['root', '-g'], {
+    // Single STRING command with shell — passing an args ARRAY with
+    // shell:true triggers Node's DEP0190 deprecation (args get concatenated
+    // unescaped). Fixed literal, so shell parsing is safe.
+    const res = spawnSync('npm root -g', {
       encoding: 'utf8',
-      shell: process.platform === 'win32',
+      shell: true,
       timeout: 15_000,
     })
     const root = (res.stdout ?? '').trim()

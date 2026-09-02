@@ -3,37 +3,166 @@
 // Session history listing / metadata / message replay — pure file operations
 // over the pi session JSONL files. Live session execution (create/resume)
 // moved to SessionService's RPC subprocess engine.
+//
+// LISTING IS LIGHTWEIGHT BY DESIGN: instead of reading every transcript in
+// full (266MB+ on a busy machine froze the whole laptop at startup), the
+// scanner stats each file and reads only a HEAD slice (session header +
+// first user message) and a TAIL slice (latest model_change / session_info).
+// Expensive facts for huge files fall back to the .meta.json cache.
 import { SessionManager } from '@mariozechner/pi-coding-agent'
 import * as fs from 'fs'
-import { dirname, basename, join } from 'path'
+import { homedir } from 'os'
+import { dirname, join } from 'path'
 import type { SessionSummary, SessionMeta, Message } from '@shared/types'
 import { convertAgentMessages } from './agent-messages'
 
 export type FsLike = Pick<
   typeof fs,
-  'existsSync' | 'readFileSync' | 'writeFileSync' | 'mkdirSync' | 'unlinkSync'
+  | 'existsSync'
+  | 'readFileSync'
+  | 'writeFileSync'
+  | 'mkdirSync'
+  | 'unlinkSync'
+  | 'readdirSync'
+  | 'statSync'
+  | 'openSync'
+  | 'readSync'
+  | 'closeSync'
 >
 
+interface SessionFacts {
+  sessionId: string | null
+  cwd: string | null
+  modelId: string | null
+  firstUserSnippet: string | null
+  name: string | null
+}
+
 export class SessionStore {
+  /** Head slice: session header + first user message live at the top. */
+  private static readonly HEAD_BYTES = 64 * 1024
+  /** Tail slice: latest model_change / session_info entries live at the end. */
+  private static readonly TAIL_BYTES = 256 * 1024
+
   private readonly pathById = new Map<string, string>()
   private readonly jsonlPathById = new Map<string, string>()
 
   constructor(private readonly fsImpl: FsLike = fs) {}
 
-  /** One pass over the JSONL: latest model_change + first user message snippet. */
-  private readSessionFacts(sessionPath: string): {
-    modelId: string | null
-    firstUserSnippet: string | null
-  } {
+  private sessionsRoot(): string {
+    return process.env['PI_SESSIONS_DIR'] ?? join(homedir(), '.pi', 'agent', 'sessions')
+  }
+
+  async list(activeSessionIds: string[]): Promise<SessionSummary[]> {
+    const root = this.sessionsRoot()
+    const out: SessionSummary[] = []
+
+    let slugEntries: fs.Dirent[]
+    try {
+      slugEntries = this.fsImpl.readdirSync(root, { withFileTypes: true })
+    } catch {
+      return []
+    }
+
+    for (const slugEntry of slugEntries) {
+      if (!slugEntry.isDirectory() && !slugEntry.isSymbolicLink()) continue
+      const dirPath = join(root, slugEntry.name)
+      const meta = this.readMeta(dirPath)
+
+      let files: fs.Dirent[]
+      try {
+        files = this.fsImpl.readdirSync(dirPath, { withFileTypes: true })
+      } catch {
+        continue
+      }
+
+      for (const f of files) {
+        if (!f.isFile() || !f.name.endsWith('.jsonl')) continue
+        const path = join(dirPath, f.name)
+        let mtimeMs = 0
+        try {
+          mtimeMs = this.fsImpl.statSync(path).mtimeMs
+        } catch {
+          // vanished between readdir and stat — skip timing, keep entry
+        }
+
+        const { head, tail } = this.readSlices(path)
+        const facts = this.parseFacts(head, tail)
+        const sessionMeta = meta[facts.sessionId ?? '']
+        const id = facts.sessionId ?? f.name.replace(/\.jsonl$/, '')
+
+        this.pathById.set(id, dirPath)
+        this.jsonlPathById.set(id, path)
+
+        out.push({
+          id,
+          path,
+          cwd: facts.cwd ?? '',
+          cwdSlug: slugEntry.name,
+          lastActiveAt: mtimeMs,
+          model: facts.modelId ?? sessionMeta?.model ?? null,
+          pinned: sessionMeta?.pinned ?? false,
+          tags: sessionMeta?.tags ?? [],
+          // Prefer an explicit name (slice scan, then the meta cache), then
+          // the first user message snippet — matches what the CLI shows.
+          name: facts.name ?? sessionMeta?.name ?? facts.firstUserSnippet,
+          isActive: activeSessionIds.includes(id),
+        })
+      }
+    }
+
+    out.sort((a, b) => b.lastActiveAt - a.lastActiveAt)
+    return out
+  }
+
+  /** Read only the head and tail slices of a transcript (never the middle). */
+  private readSlices(path: string): { head: string; tail: string } {
+    try {
+      const size = this.fsImpl.statSync(path).size
+      if (size === 0) return { head: '', tail: '' }
+      if (size <= SessionStore.HEAD_BYTES + SessionStore.TAIL_BYTES) {
+        const all = this.fsImpl.readFileSync(path, 'utf-8')
+        return { head: all, tail: all }
+      }
+      const head = this.readRange(path, 0, SessionStore.HEAD_BYTES)
+      const tail = this.readRange(path, size - SessionStore.TAIL_BYTES, SessionStore.TAIL_BYTES)
+      return { head, tail }
+    } catch {
+      return { head: '', tail: '' }
+    }
+  }
+
+  private readRange(path: string, start: number, length: number): string {
+    const fd = this.fsImpl.openSync(path, 'r')
+    try {
+      const buf = Buffer.alloc(length)
+      // fs.readSync returns the byte count directly (not {bytesRead}).
+      const bytesRead = this.fsImpl.readSync(fd, buf, 0, length, start)
+      return buf.subarray(0, bytesRead).toString('utf-8')
+    } finally {
+      this.fsImpl.closeSync(fd)
+    }
+  }
+
+  /** Extract sidebar facts from the slices. Tail is scanned LAST so its
+   *  (newer) model_change / session_info entries win. Lines cut at slice
+   *  boundaries simply fail JSON.parse and are skipped. */
+  private parseFacts(head: string, tail: string): SessionFacts {
+    let sessionId: string | null = null
+    let cwd: string | null = null
     let modelId: string | null = null
     let firstUserSnippet: string | null = null
-    try {
-      const content = this.fsImpl.readFileSync(sessionPath, 'utf-8') as string
-      for (const line of content.split('\n')) {
+    let name: string | null = null
+
+    const scan = (text: string): void => {
+      for (const line of text.split('\n')) {
         if (!line.trim()) continue
         let entry: {
           type?: string
+          id?: string
+          cwd?: string
           modelId?: string
+          name?: string
           message?: { role?: string; content?: unknown }
         }
         try {
@@ -41,11 +170,17 @@ export class SessionStore {
         } catch {
           continue
         }
-        // pi appends model_change entries after user messages on every
-        // mid-session model switch — keep scanning to the end so the sidebar
-        // shows the CURRENT model, not the initial one.
-        if (entry.type === 'model_change' && entry.modelId) {
+        if (entry.type === 'session') {
+          // Header carries the authoritative id + cwd — must match the ids
+          // live sessions report via get_state for sidebar dedup.
+          if (sessionId === null && typeof entry.id === 'string') sessionId = entry.id
+          if (cwd === null && typeof entry.cwd === 'string') cwd = entry.cwd
+        } else if (entry.type === 'model_change' && entry.modelId) {
+          // keep scanning — the LAST one is the current model
           modelId = entry.modelId
+        } else if (entry.type === 'session_info') {
+          const n = (entry.name ?? '').trim()
+          name = n || null
         } else if (
           entry.type === 'message' &&
           entry.message?.role === 'user' &&
@@ -65,40 +200,11 @@ export class SessionStore {
           if (snippet) firstUserSnippet = snippet
         }
       }
-    } catch {
-      // ignore
     }
-    return { modelId, firstUserSnippet }
-  }
 
-  async list(activeSessionIds: string[]): Promise<SessionSummary[]> {
-    const infos = await SessionManager.listAll()
-
-    return infos.map((info) => {
-      const cwdSlug = basename(dirname(info.path))
-      const cwdDir = dirname(info.path)
-      const meta = this.readMeta(cwdDir)
-      const sessionMeta = meta[info.id]
-      const facts = this.readSessionFacts(info.path)
-
-      this.pathById.set(info.id, cwdDir)
-      this.jsonlPathById.set(info.id, info.path)
-
-      return {
-        id: info.id,
-        path: info.path,
-        cwd: info.cwd,
-        cwdSlug,
-        lastActiveAt: info.modified.getTime(),
-        model: facts.modelId,
-        pinned: sessionMeta?.pinned ?? false,
-        tags: sessionMeta?.tags ?? [],
-        // Prefer an explicit name; fall back to the first user message snippet
-        // (matches what the CLI shows for unnamed sessions).
-        name: info.name ?? facts.firstUserSnippet,
-        isActive: activeSessionIds.includes(info.id),
-      }
-    })
+    scan(head)
+    scan(tail)
+    return { sessionId, cwd, modelId, firstUserSnippet, name }
   }
 
   async updateMeta(
@@ -107,9 +213,11 @@ export class SessionStore {
     patch: Partial<{ tags: string[]; pinned: boolean }>
   ): Promise<void> {
     const meta = this.readMeta(cwdDir)
+    const prev = meta[sessionId]
     meta[sessionId] = {
-      tags: patch.tags ?? meta[sessionId]?.tags ?? [],
-      pinned: patch.pinned ?? meta[sessionId]?.pinned ?? false,
+      ...prev,
+      tags: patch.tags ?? prev?.tags ?? [],
+      pinned: patch.pinned ?? prev?.pinned ?? false,
     }
     this.writeMeta(cwdDir, meta)
   }
@@ -160,6 +268,15 @@ export class SessionStore {
     if (!jsonlPath) throw new Error(`Unknown session: ${sdkSessionId}`)
     const manager = SessionManager.open(jsonlPath)
     manager.appendSessionInfo(name)
+    // Cache the name so the lightweight scanner never needs a full re-read
+    // of a huge transcript to recover it.
+    const cwdDir = this.pathById.get(sdkSessionId)
+    if (cwdDir) {
+      const meta = this.readMeta(cwdDir)
+      const prev = meta[sdkSessionId]
+      meta[sdkSessionId] = { ...prev, tags: prev?.tags ?? [], pinned: prev?.pinned ?? false, name }
+      this.writeMeta(cwdDir, meta)
+    }
   }
 
   async load(sessionPath: string): Promise<Message[]> {

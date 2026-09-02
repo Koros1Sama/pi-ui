@@ -246,6 +246,10 @@ export interface SessionMeta {
   [sessionId: string]: {
     tags: string[]
     pinned: boolean
+    /** Harvested facts cache — lets the lightweight slice scanner skip
+     *  full-file reads for huge sessions without losing names/models. */
+    name?: string | null
+    model?: string | null
   }
 }
 
