@@ -38,6 +38,7 @@ export class IpcBridge {
     this.registerSession()
     this.registerDialog()
     this.registerShell()
+    this.registerPrefs()
     this.registerSearch()
     this.registerHistory()
     this.registerUpdate()
@@ -276,6 +277,27 @@ export class IpcBridge {
     this.handle('shell:openPath', (_e, { path }: { path: string }) => {
       shell.openPath(path)
     })
+  }
+
+  private registerPrefs(): void {
+    this.handle('prefs:getTabs', async () => {
+      try {
+        return (await this.prefs.get()).openTabs ?? []
+      } catch (err) {
+        console.error('[prefs:getTabs]', err)
+        return []
+      }
+    })
+    this.handle(
+      'prefs:saveTabs',
+      async (_e, { tabs }: { tabs: import('@shared/types').PersistedTab[] }) => {
+        try {
+          await this.prefs.set({ openTabs: tabs })
+        } catch (err) {
+          console.error('[prefs:saveTabs]', err)
+        }
+      }
+    )
   }
 
   private registerSearch(): void {

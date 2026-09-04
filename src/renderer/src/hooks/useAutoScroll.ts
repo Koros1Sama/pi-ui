@@ -1,13 +1,15 @@
 // src/renderer/src/hooks/useAutoScroll.ts
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
- * Scrolls a container to the bottom whenever `trigger` changes,
- * unless the user has manually scrolled up.
+ * Scrolls a container to the bottom whenever `trigger` changes, unless the
+ * user has manually scrolled up — and exposes a `showJump` flag so the UI
+ * can offer a "jump to latest" pill while the user is reading history.
  */
 export function useAutoScroll<T extends HTMLElement>(trigger: unknown) {
   const ref = useRef<T>(null)
   const userScrolledUp = useRef(false)
+  const [showJump, setShowJump] = useState(false)
 
   useEffect(() => {
     const el = ref.current
@@ -16,6 +18,7 @@ export function useAutoScroll<T extends HTMLElement>(trigger: unknown) {
     const onScroll = () => {
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
       userScrolledUp.current = !atBottom
+      setShowJump(!atBottom)
     }
     el.addEventListener('scroll', onScroll)
     return () => el.removeEventListener('scroll', onScroll)
@@ -31,5 +34,12 @@ export function useAutoScroll<T extends HTMLElement>(trigger: unknown) {
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [trigger])
 
-  return ref
+  const jumpToBottom = useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    userScrolledUp.current = false
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [])
+
+  return { ref, showJump, jumpToBottom }
 }

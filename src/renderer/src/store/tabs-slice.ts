@@ -20,6 +20,9 @@ export interface Tab {
   mode: TabMode
   readonlySessionId?: string // past session id for readonly/loading/error tabs
   diffPaneOpen: boolean
+  /** True once the user closed the pane — new diffs update content silently
+   *  without force-reopening until the user opens it again. */
+  diffPaneDismissed?: boolean
   currentDiff: TabDiff | null
   diffComments: DiffComment[]
 }
@@ -298,14 +301,19 @@ export const createTabsSlice = (
       const tab = s.tabs.tabs.find((t) => t.id === tabId)
       if (!tab) return
       tab.currentDiff = diff
-      tab.diffPaneOpen = true
       tab.diffComments = []
+      // Respect an explicit hide: keep the content fresh but never force
+      // the pane back open on the next file change.
+      if (!tab.diffPaneDismissed) tab.diffPaneOpen = true
     }),
 
   toggleDiffPane: (tabId) =>
     set((s) => {
       const tab = s.tabs.tabs.find((t) => t.id === tabId)
-      if (tab) tab.diffPaneOpen = !tab.diffPaneOpen
+      if (!tab) return
+      tab.diffPaneOpen = !tab.diffPaneOpen
+      // Opening again re-arms auto-open; closing dismisses future changes.
+      tab.diffPaneDismissed = !tab.diffPaneOpen
     }),
 
   addDiffComment: (tabId, comment) =>

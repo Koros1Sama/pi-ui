@@ -1,6 +1,7 @@
 // src/renderer/src/App.tsx
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useStore } from './store'
+import type { SessionSummary } from '@shared/types'
 import { usePiEvents } from './hooks/usePiEvents'
 import { useUpdateEvents } from './hooks/useUpdateEvents'
 import { useResolvedDirection } from './hooks/useResolvedDirection'
@@ -25,6 +26,13 @@ export default function App() {
   const setTreePicker = useStore((s) => s.setTreePicker)
   const setToast = useStore((s) => s.setToast)
   const tabCount = useStore((s) => s.tabs.tabs.length)
+  const tabs = useStore((s) => s.tabs.tabs)
+  const createTab = useStore((s) => s.createTab)
+  const setTabMessages = useStore((s) => s.setTabMessages)
+  const setTabMode = useStore((s) => s.setTabMode)
+  /** Set once the boot-restore attempt ran — persistence waits for it so the
+   *  saved list is never overwritten with the empty pre-restore state. */
+  const restoredRef = useRef(false)
 
   // Register global pi event listeners (routes to correct tab by sessionId)
   usePiEvents()
@@ -43,6 +51,58 @@ export default function App() {
     }
   }, [setSessions])
 
+  /** Reopen persisted tabs after sleep/crash: readonly tabs as they were,
+   *  previously-live tabs as a readonly view of the newest session in their
+   *  cwd — one click on Resume goes live again. Never spawns processes. */
+  const restoreTabs = useCallback(async () => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    try {
+      const saved = await window.pi.prefs.getOpenTabs()
+      if (!saved.length) return
+      if (useStore.getState().tabs.tabs.length > 0) return
+      const sessions = useStore.getState().history.sessions
+      for (const p of saved) {
+        let target: SessionSummary | undefined
+        if (p.mode === 'readonly' && p.readonlySessionId) {
+          target = sessions.find((s) => s.id === p.readonlySessionId)
+        }
+        if (!target && p.cwd) {
+          // Newest session in the same project (list is sorted newest-first)
+          target = sessions.find((s) => s.cwd === p.cwd)
+        }
+        if (!target) continue
+
+        const tabId = crypto.randomUUID()
+        createTab({
+          id: tabId,
+          sessionId: tabId,
+          cwd: target.cwd,
+          model: p.model || target.model || '',
+          provider: p.provider || '',
+          thinkingLevel: p.thinkingLevel,
+          status: 'idle',
+          messages: [],
+          currentStreamingContent: '',
+          mode: 'loading',
+          readonlySessionId: target.id,
+          diffPaneOpen: false,
+          currentDiff: null,
+          diffComments: [],
+        })
+        try {
+          const messages = await window.pi.sessions.load(target.path)
+          setTabMessages(tabId, messages)
+          setTabMode(tabId, 'readonly')
+        } catch {
+          setTabMode(tabId, 'error')
+        }
+      }
+    } catch (err) {
+      console.error('[restoreTabs]', err)
+    }
+  }, [createTab, setTabMessages, setTabMode])
+
   useEffect(() => {
     // Config arrives instantly; the model list may wait out the pi RPC hub
     // boot (user extensions) — don't block the UI shell on it.
@@ -55,8 +115,26 @@ export default function App() {
       .then(setModels)
       .catch((err) => console.error('[models:list]', err))
 
-    loadSessions()
-  }, [setConfig, setModels, loadSessions])
+    loadSessions().then(() => void restoreTabs())
+  }, [setConfig, setModels, loadSessions, restoreTabs])
+
+  // Persist open tabs (debounced) after the boot restore completed —
+  // survives sleep/crash/restart with the workspace layout intact.
+  useEffect(() => {
+    if (!restoredRef.current) return
+    const timer = setTimeout(() => {
+      const persisted = useStore.getState().tabs.tabs.map((tab) => ({
+        cwd: tab.cwd,
+        model: tab.model,
+        provider: tab.provider,
+        thinkingLevel: tab.thinkingLevel,
+        mode: tab.mode === 'readonly' ? ('readonly' as const) : ('active' as const),
+        readonlySessionId: tab.readonlySessionId,
+      }))
+      window.pi.prefs.saveTabs(persisted).catch((err) => console.error('[saveTabs]', err))
+    }, 800)
+    return () => clearTimeout(timer)
+  }, [tabs])
 
   // Refresh sessions list whenever a tab is opened or closed
   useEffect(() => {

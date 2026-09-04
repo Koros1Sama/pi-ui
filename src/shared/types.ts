@@ -43,8 +43,21 @@ export interface AppDefaults {
   uiDirection?: UiDirection
 }
 
+/** Minimal tab snapshot persisted across app restarts (sleep/crash safety). */
+export interface PersistedTab {
+  cwd: string
+  model: string
+  provider: string
+  thinkingLevel: AppThinkingLevel
+  /** 'active' tabs restore as a readonly view of the newest session in cwd
+   *  (one click on Resume goes live again); 'readonly' tabs reopen as-is. */
+  mode: 'active' | 'readonly'
+  readonlySessionId?: string
+}
+
 export interface Preferences {
   lastUsedDirectory: string | null
+  openTabs?: PersistedTab[]
 }
 
 // ── Content search (Everything-style project file search) ────────────────────
@@ -304,6 +317,10 @@ export interface PiAPI {
   }
   models: {
     list(): Promise<ModelEntry[]>
+  }
+  prefs: {
+    getOpenTabs(): Promise<PersistedTab[]>
+    saveTabs(tabs: PersistedTab[]): Promise<void>
   }
   dialog: {
     openDirectory(): Promise<string | null>

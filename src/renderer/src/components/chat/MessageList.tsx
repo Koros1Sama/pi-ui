@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { memo } from 'react'
-import { Loader2, X } from 'lucide-react'
+import { Loader2, X, ArrowDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store'
 import { useAutoScroll } from '@/hooks/useAutoScroll'
@@ -99,51 +99,69 @@ export default function MessageList({ tabId, readonlyMessages }: Props = {}) {
   const isBooting = !readonlyMessages && tab?.status === 'booting'
   // Include pane activation in the trigger: a pane revealed from display:none
   // has no layout while hidden, so it re-scrolls to the bottom on reveal.
-  const scrollRef = useAutoScroll<HTMLDivElement>(
+  const {
+    ref: scrollRef,
+    showJump,
+    jumpToBottom,
+  } = useAutoScroll<HTMLDivElement>(
     messages.length + streamingContent.length + (isActivePane ? 1 : 0)
   )
 
   return (
-    <div ref={scrollRef} data-testid="message-list" className="flex-1 overflow-y-auto py-1">
-      {messages.map((msg) => (
-        <div key={msg.id} className="mb-1">
-          {msg.role === 'user' ? (
-            <UserMessage msg={msg} tabId={tabId} />
-          ) : (
-            <AssistantMessage content={msg.content} />
-          )}
-          {msg.toolCalls.length > 0 && (
-            <div className="mt-0.5 space-y-px">
-              {msg.toolCalls.map((call) => (
-                <ToolCallEntry key={call.id} call={call} />
-              ))}
-            </div>
-          )}
-        </div>
-      ))}
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div ref={scrollRef} data-testid="message-list" className="flex-1 overflow-y-auto py-1">
+        {messages.map((msg) => (
+          <div key={msg.id} className="mb-1">
+            {msg.role === 'user' ? (
+              <UserMessage msg={msg} tabId={tabId} />
+            ) : (
+              <AssistantMessage content={msg.content} />
+            )}
+            {msg.toolCalls.length > 0 && (
+              <div className="mt-0.5 space-y-px">
+                {msg.toolCalls.map((call) => (
+                  <ToolCallEntry key={call.id} call={call} />
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
 
-      {streamingContent && <AssistantMessage content={streamingContent} streaming />}
+        {streamingContent && <AssistantMessage content={streamingContent} streaming />}
 
-      {(isThinking || isBooting) && (
-        <div className="mx-3 flex items-center gap-1 py-3">
-          <span
-            className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]"
-            style={{ backgroundColor: 'var(--pi-accent)' }}
-          />
-          <span
-            className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.15s]"
-            style={{ backgroundColor: 'var(--pi-accent)' }}
-          />
-          <span
-            className="h-1.5 w-1.5 animate-bounce rounded-full"
-            style={{ backgroundColor: 'var(--pi-accent)' }}
-          />
-          {isBooting && (
-            <span className="ms-2 text-[11px]" style={{ color: 'var(--pi-dim)' }}>
-              Starting pi… first prompt can take ~30–60s
-            </span>
-          )}
-        </div>
+        {(isThinking || isBooting) && (
+          <div className="mx-3 flex items-center gap-1 py-3">
+            <span
+              className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.3s]"
+              style={{ backgroundColor: 'var(--pi-accent)' }}
+            />
+            <span
+              className="h-1.5 w-1.5 animate-bounce rounded-full [animation-delay:-0.15s]"
+              style={{ backgroundColor: 'var(--pi-accent)' }}
+            />
+            <span
+              className="h-1.5 w-1.5 animate-bounce rounded-full"
+              style={{ backgroundColor: 'var(--pi-accent)' }}
+            />
+            {isBooting && (
+              <span className="ms-2 text-[11px]" style={{ color: 'var(--pi-dim)' }}>
+                Starting pi… first prompt can take ~30–60s
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showJump && (
+        <button
+          data-testid="jump-to-bottom"
+          onClick={jumpToBottom}
+          title="Jump to latest — الانتقال إلى الأحدث"
+          className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800/95 px-3 py-1 text-[10px] text-zinc-300 shadow-lg transition-colors hover:bg-zinc-700"
+        >
+          <ArrowDown size={10} />
+          latest
+        </button>
       )}
     </div>
   )

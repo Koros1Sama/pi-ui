@@ -149,6 +149,10 @@ if (process.env['PI_E2E']) {
         content: 'export const hello = "world"\n',
       }),
     },
+    prefs: {
+      getOpenTabs: async () => [],
+      saveTabs: async () => {},
+    },
     shell: {
       openPath: async () => {},
     },
@@ -301,6 +305,10 @@ if (process.env['PI_E2E']) {
     dialog: {
       openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
       pickFile: () => ipcRenderer.invoke('dialog:pickFile'),
+    },
+    prefs: {
+      getOpenTabs: () => ipcRenderer.invoke('prefs:getTabs'),
+      saveTabs: (tabs) => ipcRenderer.invoke('prefs:saveTabs', { tabs }),
     },
     shell: {
       openPath: (path) => ipcRenderer.invoke('shell:openPath', { path }),

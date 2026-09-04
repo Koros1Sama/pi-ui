@@ -3,6 +3,11 @@ import { useStore } from '../store'
 
 const DIFF_TOOLS = new Set(['write', 'edit', 'read_write', 'patch'])
 
+/** Tools that spawn separate agent/worker sessions — completing one means a
+ *  new transcript exists that the sidebar should surface immediately. */
+const SPAWN_TOOLS = new Set(['spawn', 'task', 'agent', 'subagent', 'run-agent'])
+let sessionsRefreshTimer: ReturnType<typeof setTimeout> | null = null
+
 /**
  * Registers global pi event listeners and routes each event to the correct
  * tab by sessionId. Call once at the App level — not per-tab.
@@ -31,6 +36,18 @@ export function usePiEvents(): void {
     // re-parses the streaming markdown). Flushing per-token made long
     // responses janky — accumulate deltas per tab and flush at ~16fps.
     const pendingTokens = new Map<string, string>()
+
+    /** Debounced sidebar refresh — coalesces rapid spawns into one scan. */
+    function scheduleSessionsRefresh(): void {
+      if (sessionsRefreshTimer) return
+      sessionsRefreshTimer = setTimeout(() => {
+        sessionsRefreshTimer = null
+        window.pi.sessions
+          .list()
+          .then(useStore.getState().setSessions)
+          .catch(() => undefined)
+      }, 1500)
+    }
     function flushTokens(): void {
       if (pendingTokens.size === 0) return
       const entries = Array.from(pendingTokens.entries())
@@ -106,6 +123,9 @@ export function usePiEvents(): void {
             const path = typeof args?.path === 'string' ? args.path : 'unknown'
             setTabDiff(tabId, { path, unifiedDiff: result })
           }
+          // Spawned agents/workers get their own session files — surface them
+          // in the sidebar immediately (they can be opened as tabs from there).
+          if (SPAWN_TOOLS.has(toolName)) scheduleSessionsRefresh()
           toolArgs.delete(toolCallId)
         }
       ),

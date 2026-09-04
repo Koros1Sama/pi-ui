@@ -94,6 +94,24 @@ let cachedRuntime: NodeRuntime | null = null
  */
 export function resolveNodeRuntime(): NodeRuntime {
   if (cachedRuntime) return cachedRuntime
+  // Prefer the SYSTEM node when available: npm-global native modules
+  // (better-sqlite3, sharp, …) are compiled against the system Node ABI.
+  // Electron's bundled node (ELECTRON_RUN_AS_NODE) has a DIFFERENT ABI —
+  // running pi under it breaks every native module the user's extensions
+  // load ("compiled against NODE_MODULE_VERSION X… requires Y").
+  try {
+    const probe = spawnSync('node', ['--eval', 'process.exit(0)'], {
+      encoding: 'utf8',
+      timeout: 10_000,
+      windowsHide: true,
+    })
+    if (probe.status === 0) {
+      cachedRuntime = { command: 'node', env: { ...process.env } as Record<string, string> }
+      return cachedRuntime
+    }
+  } catch {
+    // no system node — fall through to Electron's node
+  }
   const asNodeEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1' } as Record<string, string>
   try {
     const probe = spawnSync(process.execPath, ['--eval', 'process.exit(0)'], {
@@ -105,7 +123,7 @@ export function resolveNodeRuntime(): NodeRuntime {
       return cachedRuntime
     }
   } catch {
-    // fall through to system node
+    // fall through to the plain 'node' guess
   }
   cachedRuntime = { command: 'node', env: { ...process.env } as Record<string, string> }
   return cachedRuntime
